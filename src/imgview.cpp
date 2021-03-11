@@ -246,6 +246,7 @@ void Imgview::refresh_callback() {
             if(current.wants_path == current.current_path) {
                 current.graphic = gawl::Graphic(current.buffer);
                 reset_draw_pos();
+                current.needs_reload = false;
             } else {
                 current_loaded = false;
             }
