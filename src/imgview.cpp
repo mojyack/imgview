@@ -384,7 +384,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
         quit_application();
         return;
     }
-    const auto arg   = Path(path);
+    const auto arg   = std::filesystem::absolute(path);
     const auto dir   = std::filesystem::is_directory(arg) ? arg : arg.parent_path();
     auto       files = get_sorted_images(dir.string().data());
     if(is_regular_file(arg)) {
