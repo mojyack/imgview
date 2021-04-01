@@ -473,6 +473,8 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
     info_font        = gawl::TextRender({"/usr/share/fonts/noto-cjk/NotoSansCJK-Black.ttc"}, 16);
 }
 Imgview::~Imgview() {
-    loader_event.wakeup();
-    loader_thread.join();
+    if(loader_thread.joinable()) {
+        loader_event.wakeup();
+        loader_thread.join();
+    }
 }
