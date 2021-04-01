@@ -62,6 +62,10 @@ PathCheckResult check_and_retrive_paths(const char* root, IndexedPaths& files, c
         path    = missing.parent_path();
     }
 }
+
+bool is_loaded(const RequestImage& image) {
+    return image.second && image.first == image.second->get_current_path() && image.second->get_stage() == ImageStage::GRAPHIC;
+}
 } // namespace
 
 void Imgview::do_action(Actions action, uint32_t key) {
@@ -76,7 +80,8 @@ void Imgview::do_action(Actions action, uint32_t key) {
         const bool reverse = action == Actions::PREV_WORK;
         if(check_existence(reverse)) {
             if(auto next_directory = get_next_directory(image_files.get_base().data(), action == Actions::PREV_WORK, root.data())) {
-                image_files = get_sorted_images(next_directory->data());
+                image_files         = get_sorted_images(next_directory->data());
+                page_control_target = -1;
                 start_loading(false);
                 refresh();
             }
@@ -85,12 +90,35 @@ void Imgview::do_action(Actions action, uint32_t key) {
     case Actions::NEXT_PAGE:
     case Actions::PREV_PAGE: {
         const bool reverse = action == Actions::PREV_PAGE;
-        if(check_existence(reverse)) {
-            if(auto updated = get_next_image_file(image_files.get_current().data(), reverse)) {
-                image_files = std::move(updated.value());
-                start_loading(reverse);
+        if(page_control_target == -1) {
+            if(check_existence(reverse)) {
+                if(auto updated = get_next_image_file(image_files.get_current().data(), reverse)) {
+                    image_files         = std::move(updated.value());
+                    page_control_target = -1;
+                    start_loading(reverse);
+                    refresh();
+                };
+            }
+        } else {
+            bool do_refresh;
+            {
+                std::lock_guard<std::mutex> lock(images.mutex);
+                if(!images.data[0].second || !images.data[0].second->get_layer_info()) {
+                    break;
+                }
+                auto& image      = images.data[0].second;
+                auto& layer_info = image->get_layer_info();
+                auto  pages      = layer_info->get_pages();
+                if(static_cast<size_t>(page_control_target) >= pages.size()) {
+                    break;
+                }
+                if((do_refresh = layer_info->next_page(std::get<0>(pages[page_control_target]).data(), reverse))) {
+                    image->mark_old_rendered();
+                }
+            }
+            if(do_refresh) {
                 refresh();
-            };
+            }
         }
     } break;
     case Actions::PAGE_SELECT_ON:
@@ -123,24 +151,62 @@ void Imgview::do_action(Actions action, uint32_t key) {
         if(check_existence(false)) {
             auto files = get_sorted_images(image_files.get_base().data());
             if(auto p = std::atoi(page_select_buffer.data()) - 1; p >= 0 && static_cast<long unsigned int>(p) < files.size()) {
-                image_files = std::move(files);
+                image_files         = std::move(files);
+                page_control_target = -1;
                 start_loading(false);
             }
         }
         refresh();
     } break;
-    case Actions::TOGGL_SHOW_INFO:
-        switch(info_format) {
-            case InfoFormats::NONE:
-                info_format = InfoFormats::SHORT;
-                break;
-            case InfoFormats::SHORT:
-                info_format = InfoFormats::LONG;
-                break;
-            case InfoFormats::LONG:
-                info_format = InfoFormats::NONE;
-                break;
+    case Actions::TOGGLE_LAYER: {
+        std::lock_guard<std::mutex> lock(images.mutex);
+        if(!images.data[0].second || !images.data[0].second->get_layer_info()) {
+            break;
         }
+        size_t index      = key - KEY_F1;
+        auto&  image      = images.data[0].second;
+        auto&  layer_info = image->get_layer_info();
+        auto   switchs    = layer_info->get_switchs();
+        if(index >= switchs.size()) {
+            break;
+        }
+        layer_info->toggle_switch(switchs[index].first.data());
+        image->mark_old_rendered();
+    }
+        refresh();
+        break;
+    case Actions::TOGGLE_LAYER_INFO:
+        show_layer_info = !show_layer_info;
+        refresh();
+        break;
+    case Actions::TOGGLE_SHOW_INFO:
+        switch(info_format) {
+        case InfoFormats::NONE:
+            info_format = InfoFormats::SHORT;
+            break;
+        case InfoFormats::SHORT:
+            info_format = InfoFormats::LONG;
+            break;
+        case InfoFormats::LONG:
+            info_format = InfoFormats::NONE;
+            break;
+        }
+        refresh();
+        break;
+    case Actions::SET_PAGE_CONTROL: {
+        std::lock_guard<std::mutex> lock(images.mutex);
+        if(!images.data[0].second || !images.data[0].second->get_layer_info()) {
+            break;
+        }
+        size_t index      = key - KEY_F1;
+        auto&  image      = images.data[0].second;
+        auto&  layer_info = image->get_layer_info();
+        auto   pages      = layer_info->get_pages();
+        if(index >= pages.size()) {
+            break;
+        }
+        page_control_target = (page_control_target == static_cast<int>(index)) ? -1 : index;
+    }
         refresh();
         break;
     case Actions::MOVE_DRAW_POS: {
@@ -161,11 +227,12 @@ void Imgview::do_action(Actions action, uint32_t key) {
             std::lock_guard<std::mutex> lock(images.mutex);
 
             auto& current = images.data[0];
-            if(current.wants_path != current.current_path) {
+            if(!is_loaded(current)) {
                 break;
             }
             reset_draw_pos();
-            draw_scale = (action == Actions::FIT_WIDTH) ? 1. * get_window_size()[0] / current.graphic.get_width(this) : 1. * get_window_size()[1] / current.graphic.get_height(this);
+            const auto graph = current.second->get_graphic();
+            draw_scale       = (action == Actions::FIT_WIDTH) ? 1. * get_window_size()[0] / graph->get_width(this) : 1. * get_window_size()[1] / graph->get_height(this);
         }
         refresh();
     } break;
@@ -176,10 +243,11 @@ void Imgview::reset_draw_pos() {
     draw_offset[1] = 0;
     draw_scale     = 0.0;
 }
-gawl::Area Imgview::calc_draw_area(const gawl::Graphic& graphic) const {
-    const int    size[2] = {graphic.get_width(this), graphic.get_height(this)};
-    const double exp[2]  = {size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
-    auto         area    = gawl::calc_fit_rect({0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, size[0], size[1]);
+gawl::Area Imgview::calc_draw_area(const Image& image) const {
+    const auto       graph  = image.get_graphic();
+    const std::array size   = {graph->get_width(this), graph->get_height(this)};
+    const double     exp[2] = {size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
+    auto             area   = gawl::calc_fit_rect({0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, size[0], size[1]);
     area[0] += draw_offset[0] - exp[0];
     area[1] += draw_offset[1] - exp[1];
     area[2] += draw_offset[0] + exp[0];
@@ -190,11 +258,13 @@ void Imgview::zoom_draw_pos(double value, double (&origin)[2]) {
     std::lock_guard<std::mutex> lock(images.mutex);
 
     auto& current = images.data[0];
-    if(current.wants_path != current.current_path) {
+    if(!is_loaded(current)) {
         return;
     }
-    const auto   area     = calc_draw_area(current.graphic);
-    const double delta[2] = {current.graphic.get_width(this) * value, current.graphic.get_height(this) * value};
+    const auto       area     = calc_draw_area(current.second.value());
+    const auto       graph    = current.second->get_graphic();
+    const std::array size     = {graph->get_width(this), graph->get_height(this)};
+    const double     delta[2] = {size[0] * value, size[1] * value};
     for(int i = 0; i < 2; ++i) {
         const double center = area[i] + (area[i + 2] - area[i]) / 2;
         draw_offset[i] += ((center - origin[i]) / (area[i + 2] - area[i])) * delta[i];
@@ -206,6 +276,7 @@ bool Imgview::check_existence(const bool reverse) {
     case PathCheckResult::EXISTS:
         return true;
     case PathCheckResult::RETRIEVED:
+        page_control_target = -1;
         start_loading(false);
         refresh();
         break;
@@ -218,18 +289,16 @@ bool Imgview::check_existence(const bool reverse) {
 void Imgview::start_loading(const bool reverse) {
     std::lock_guard<std::mutex> lock(images.mutex);
 
-    auto& current        = images.data[0];
-    auto& preload        = images.data[1];
-    current.wants_path   = image_files.get_current();
-    current.needs_reload = true;
+    auto& current = images.data[0];
+    auto& preload = images.data[1];
+    current.first = image_files.get_current();
 
     // load preload
     const size_t index = image_files.get_index();
     if(index != (reverse ? 0 : image_files.size() - 1)) {
-        preload.wants_path   = image_files[index + (reverse ? -1 : 1)];
-        preload.needs_reload = true;
+        preload.first = image_files[index + (reverse ? -1 : 1)];
     } else {
-        preload.wants_path.clear();
+        preload.first.clear();
     }
 
     loader_event.wakeup();
@@ -237,25 +306,43 @@ void Imgview::start_loading(const bool reverse) {
 void Imgview::refresh_callback() {
     gawl::clear_screen({0, 0, 0, 0});
 
-    bool current_loaded = true;
     {
         std::lock_guard<std::mutex> lock(images.mutex);
 
         auto& current = images.data[0];
-        if(current.needs_reload) {
-            if(current.wants_path == current.current_path) {
-                current.graphic = gawl::Graphic(current.buffer);
+        if(current.second) {
+            if(current.second->get_stage() == ImageStage::BUFFER) {
+                current.second->load_texture();
                 reset_draw_pos();
-                current.needs_reload = false;
-            } else {
-                current_loaded = false;
+            }
+            if(current.second->get_old_rendered()) {
+                current.second->render_layers();
+            }
+
+            current.second->get_graphic()->draw_fit_rect(this, calc_draw_area(*current.second));
+            if(auto& info = current.second->get_layer_info(); info && show_layer_info) {
+                size_t i      = 0;
+                size_t offset = 20;
+                {
+                    const auto switchs = info->get_switchs();
+                    for(; i < switchs.size(); ++i) {
+                        info_font.draw(this, 20, i * 24 + offset, {1, 1, 1, switchs[i].second ? 1 : 0.5}, switchs[i].first.data());
+                    }
+                }
+                offset += i * 24;
+                {
+                    const auto pages = info->get_pages();
+                    for(i = 0; i < pages.size(); ++i) {
+                        std::stringstream str;
+                        str << std::get<0>(pages[i]) << "[" << std::get<2>(pages[i]) << "/" << std::get<1>(pages[i]) << "]";
+                        info_font.draw(this, 20, i * 24 + offset, {1, 1, 1, (static_cast<int>(i) == page_control_target) ? 1 : 0.5}, str.str().data());
+                    }
+                }
             }
         }
-    }
-    auto& current = images.data[0].graphic;
-    current.draw_rect(this, calc_draw_area(current));
-    if(!current_loaded) {
-        info_font.draw_fit_rect(this, {0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, {1, 1, 1, 1}, "loading...");
+        if(!is_loaded(current)) {
+            info_font.draw_fit_rect(this, {0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, {1, 1, 1, 1}, "loading...");
+        }
     }
     if(page_select) {
         constexpr const char* pagestr       = "Page: ";
@@ -272,18 +359,18 @@ void Imgview::refresh_callback() {
         page_select_font.draw(this, 5 + pagestr_width, size[1] - dist, {1, 1, 1, 1}, page_select_buffer.data());
     }
     if(info_format != InfoFormats::NONE) {
-        const auto         current_path = Path(image_files.get_current());
-        std::string         work_name;
+        const auto  current_path = Path(image_files.get_current());
+        std::string work_name;
         switch(info_format) {
-            case InfoFormats::SHORT:
-                work_name = current_path.parent_path().filename().string() + "/" + current_path.filename().string();
-                break;
-            case InfoFormats::LONG:
-                work_name = std::filesystem::relative(current_path, root).string();
-                break;
-            default:
-                break;
-        } 
+        case InfoFormats::SHORT:
+            work_name = current_path.parent_path().filename().string() + "/" + current_path.filename().string();
+            break;
+        case InfoFormats::LONG:
+            work_name = std::filesystem::relative(current_path, root).string();
+            break;
+        default:
+            break;
+        }
         std::ostringstream infostr;
         infostr << "[" << image_files.get_index() + 1 << "/" << image_files.size() << "] " << work_name;
         constexpr int dist = 7;
@@ -301,7 +388,8 @@ void Imgview::window_resize_callback() {
     reset_draw_pos();
 }
 void Imgview::keyboard_callback(uint32_t key, gawl::ButtonState state) {
-    const static std::vector<uint32_t> num_keys = {KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9};
+    const static std::vector<uint32_t> NUM_KEYS  = {KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9};
+    const static std::vector<uint32_t> FUNC_KEYS = {KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10, KEY_F11, KEY_F12};
     struct KeyBind {
         Actions                   action;
         std::vector<uint32_t>     keys;
@@ -318,18 +406,21 @@ void Imgview::keyboard_callback(uint32_t key, gawl::ButtonState state) {
         {Actions::PREV_PAGE, {KEY_Z, KEY_LEFT, KEY_SPACE}, true},
         {Actions::PAGE_SELECT_ON, {KEY_P}, false, [this]() -> bool { return !page_select; }},
         {Actions::PAGE_SELECT_OFF, {KEY_ESC, KEY_P}, false, [this]() -> bool { return page_select; }},
-        {Actions::PAGE_SELECT_NUM, num_keys, true, [this]() -> bool { return page_select; }},
+        {Actions::PAGE_SELECT_NUM, NUM_KEYS, true, [this]() -> bool { return page_select; }},
         {Actions::PAGE_SELECT_NUM_DEL, {KEY_BACKSPACE}, false, [this]() -> bool { return page_select; }},
         {Actions::PAGE_SELECT_APPLY, {KEY_ENTER}, false, [this]() -> bool { return page_select; }},
-        {Actions::TOGGL_SHOW_INFO, {KEY_F}, false},
+        {Actions::TOGGLE_LAYER, FUNC_KEYS, true, [this]() -> bool { return !shift; }},
+        {Actions::TOGGLE_LAYER_INFO, {KEY_F}, true, [this]() -> bool { return shift; }},
+        {Actions::SET_PAGE_CONTROL, FUNC_KEYS, true, [this]() -> bool { return shift; }},
+        {Actions::TOGGLE_SHOW_INFO, {KEY_F}, true},
         {Actions::MOVE_DRAW_POS, {KEY_H, KEY_J, KEY_K, KEY_L}, false},
-        {Actions::RESET_DRAW_POS, {KEY_0}, false},
+        {Actions::RESET_DRAW_POS, {KEY_0}, false, [this]() -> bool { return !page_select; }},
         {Actions::FIT_WIDTH, {KEY_1}, false},
         {Actions::FIT_HEIGHT, {KEY_2}, false},
     };
     Actions action = Actions::NONE;
     if(key == KEY_LEFTSHIFT || key == KEY_RIGHTSHIFT) {
-        shift = state == gawl::ButtonState::press;
+        shift = state == gawl::ButtonState::press || state == gawl::ButtonState::repeat;
         return;
     }
     for(auto& a : keybinds) {
@@ -385,9 +476,9 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
         return;
     }
     const auto arg   = std::filesystem::absolute(path);
-    const auto dir   = std::filesystem::is_directory(arg) ? arg : arg.parent_path();
+    const auto dir   = (std::filesystem::is_directory(arg) && !is_layer_file(arg.string().data())) ? arg : arg.parent_path();
     auto       files = get_sorted_images(dir.string().data());
-    if(is_regular_file(arg)) {
+    if(is_regular_file(arg) || is_layer_file(arg.string().data())) {
         const auto filename = arg.filename().string();
         if(!files.set_index_by_name(filename.data())) {
             std::cerr << "no such file." << std::endl;
@@ -401,36 +492,37 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
 
     loader_thread = std::thread([this]() {
         while(is_running()) {
-            std::string loading;
+            std::optional<Image> loading;
             {
                 std::lock_guard<std::mutex> lock(images.mutex);
                 for(auto& i : images.data) {
-                    if(i.wants_path == i.current_path || i.wants_path.empty()) {
+                    if(i.first.empty() || (i.second && i.second->get_current_path() == i.first)) {
                         continue;
                     }
-                    bool found = false;
+
+                    Image new_image(i.first.data());
                     for(auto& o : images.data) {
-                        if(i.wants_path == o.current_path) {
-                            i.buffer       = std::move(o.buffer);
-                            i.current_path = std::move(o.current_path);
-                            found          = true;
-                            break;
+                        if(!o.second) {
+                            continue;
                         }
+                        new_image.reuse_from(o.second.value());
                     }
-                    if(!found) {
-                        loading = i.wants_path;
+                    if(new_image.get_stage() == ImageStage::EMPTY) {
+                        loading.emplace(std::move(new_image));
                         break;
+                    } else {
+                        i.second.emplace(std::move(new_image));
                     }
                 }
             }
-            if(!loading.empty()) {
-                auto buffer = gawl::PixelBuffer(loading.data(), gawl::GraphicLoader::DEVIL);
+            if(loading) {
+                loading->load_buffer();
                 {
                     std::lock_guard<std::mutex> lock(images.mutex);
+                    auto                        want_path = loading->get_current_path();
                     for(auto& i : images.data) {
-                        if(i.wants_path == loading) {
-                            i.buffer       = std::move(buffer);
-                            i.current_path = std::move(loading);
+                        if(i.first == want_path) {
+                            i.second.emplace(std::move(*loading));
                             refresh();
                             break;
                         }

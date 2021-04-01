@@ -11,10 +11,13 @@ bool contains(const T& vec, const E& elm) {
 }
 bool is_image_file(const char* path) {
     constexpr std::array EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"};
+    const auto extension = Path(path).extension().string();
+    if(is_layer_file(path)) {
+        return true;
+    }
     if(!std::filesystem::is_regular_file(path)) {
         return false;
     }
-    const auto extension = Path(path).extension().string();
     return contains(EXTENSIONS, extension);
 }
 IndexedPaths list_files(const char* path) {
@@ -69,6 +72,19 @@ std::optional<std::string> get_next_directory_recursive(const char* path, const 
 }
 } // namespace
 
+bool is_layer_file(const char* path) {
+    constexpr const char* EXTENSION = ".layer";
+    if(Path(path).extension() != EXTENSION) {
+        return false;
+    }
+    if(!std::filesystem::is_regular_file(path)) {
+        auto script_path = std::filesystem::path(path);
+        script_path /= "script";
+        return std::filesystem::is_regular_file(script_path);
+    } else {
+        return true;
+    }
+}
 std::optional<std::string> find_viewable_directory(const char* path, const bool skip_current) {
     const auto files = list_files(path);
     if(!skip_current) {
@@ -99,7 +115,7 @@ IndexedPaths get_sorted_images(const char* path) {
 IndexedPaths get_sorted_directories(const char* path) {
     auto files = list_files(path);
     files.filter([](const std::string& path) {
-        return !std::filesystem::is_directory(path.data());
+        return !std::filesystem::is_directory(path.data()) || is_layer_file(path.data());
     });
     return files;
 }

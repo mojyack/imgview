@@ -2,18 +2,9 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
-#include <string>
 
-#include "gawl/gawl.hpp"
+#include "image.hpp"
 #include "indexed-paths.hpp"
-
-struct Image {
-    bool              needs_reload = false;
-    std::string       wants_path;
-    std::string       current_path;
-    gawl::PixelBuffer buffer;
-    gawl::Graphic     graphic;
-};
 
 class Imgview : public gawl::WaylandWindow {
   private:
@@ -29,7 +20,10 @@ class Imgview : public gawl::WaylandWindow {
         PAGE_SELECT_NUM,
         PAGE_SELECT_NUM_DEL,
         PAGE_SELECT_APPLY,
-        TOGGL_SHOW_INFO,
+        TOGGLE_LAYER,
+        TOGGLE_LAYER_INFO,
+        SET_PAGE_CONTROL,
+        TOGGLE_SHOW_INFO,
         MOVE_DRAW_POS,
         RESET_DRAW_POS,
         FIT_WIDTH,
@@ -47,24 +41,26 @@ class Imgview : public gawl::WaylandWindow {
     std::string      root;
     IndexedPaths     image_files;
 
-    std::thread                         loader_thread;
-    gawl::ConditionalVariable           loader_event;
-    gawl::SafeVar<std::array<Image, 2>> images;
+    std::thread                                loader_thread;
+    gawl::ConditionalVariable                  loader_event;
+    gawl::SafeVar<std::array<RequestImage, 2>> images;
 
     bool        shift       = false;
     bool        page_select = false;
     std::string page_select_buffer;
-    InfoFormats info_format       = InfoFormats::SHORT;
-    double      draw_offset[2]    = {0, 0};
-    double      draw_scale        = 1.0;
-    bool        clicked[2]        = {false};
-    bool        moved             = false;
-    double      clicked_pos[2][2] = {};
-    double      pointer_pos[2]    = {-1, -1};
+    InfoFormats info_format         = InfoFormats::SHORT;
+    bool        show_layer_info     = false;
+    double      draw_offset[2]      = {0, 0};
+    double      draw_scale          = 1.0;
+    bool        clicked[2]          = {false};
+    bool        moved               = false;
+    double      clicked_pos[2][2]   = {};
+    double      pointer_pos[2]      = {-1, -1};
+    int         page_control_target = -1; // -1: image file, !-1: layer
 
     void       do_action(Actions action, uint32_t key = KEY_RESERVED);
     void       reset_draw_pos();
-    gawl::Area calc_draw_area(const gawl::Graphic& graphic) const;
+    gawl::Area calc_draw_area(const Image& image) const;
     void       zoom_draw_pos(double value, double (&origin)[2]);
     bool       check_existence(const bool reverse);
     void       start_loading(const bool reverse);
