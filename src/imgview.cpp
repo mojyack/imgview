@@ -84,15 +84,41 @@ void Imgview::do_action(Actions action, uint32_t key) {
     } break;
     case Actions::NEXT_PAGE:
     case Actions::PREV_PAGE: {
-        const bool reverse = action == Actions::PREV_PAGE;
-        if(check_existence(reverse)) {
-            if(auto updated = get_next_image_file(image_files.get_current().data(), reverse)) {
-                image_files = std::move(updated.value());
-                start_loading(reverse);
-                refresh();
-            };
+        const bool reverse    = action == Actions::PREV_PAGE;
+        bool       do_update  = true;
+        bool       do_refresh = false;
+        do {
+            const auto current_index = image_files.get_index();
+            if((!reverse && current_index + 1 >= image_files.size()) || (reverse && current_index <= 0)) {
+                break;
+            }
+            const auto next_index = current_index + (!reverse ? 1 : -1);
+            const auto next_path  = image_files[next_index];
+            if(!std::filesystem::exists(next_path)) {
+                break;
+            }
+            image_files.set_index(next_index);
+            do_update  = false;
+            do_refresh = true;
+        } while(0);
+        if(do_update) {
+            if(check_existence(reverse)) {
+                if(auto updated = get_next_image_file(image_files.get_current().data(), reverse)) {
+                    image_files = std::move(updated.value());
+                    do_refresh  = true;
+                }
+            }
+        }
+        if(do_refresh) {
+            start_loading(reverse);
+            refresh();
         }
     } break;
+    case Actions::REFRESH_FILES:
+        if(check_existence(false)) {
+            image_files = get_sorted_images(Path(image_files.get_current()).parent_path().string().data());
+        }
+        break;
     case Actions::PAGE_SELECT_ON:
         page_select = true;
         page_select_buffer.clear();
@@ -129,17 +155,17 @@ void Imgview::do_action(Actions action, uint32_t key) {
         }
         refresh();
     } break;
-    case Actions::TOGGL_SHOW_INFO:
+    case Actions::TOGGLE_SHOW_INFO:
         switch(info_format) {
-            case InfoFormats::NONE:
-                info_format = InfoFormats::SHORT;
-                break;
-            case InfoFormats::SHORT:
-                info_format = InfoFormats::LONG;
-                break;
-            case InfoFormats::LONG:
-                info_format = InfoFormats::NONE;
-                break;
+        case InfoFormats::NONE:
+            info_format = InfoFormats::SHORT;
+            break;
+        case InfoFormats::SHORT:
+            info_format = InfoFormats::LONG;
+            break;
+        case InfoFormats::LONG:
+            info_format = InfoFormats::NONE;
+            break;
         }
         refresh();
         break;
@@ -272,18 +298,18 @@ void Imgview::refresh_callback() {
         page_select_font.draw(this, 5 + pagestr_width, size[1] - dist, {1, 1, 1, 1}, page_select_buffer.data());
     }
     if(info_format != InfoFormats::NONE) {
-        const auto         current_path = Path(image_files.get_current());
-        std::string         work_name;
+        const auto  current_path = Path(image_files.get_current());
+        std::string work_name;
         switch(info_format) {
-            case InfoFormats::SHORT:
-                work_name = current_path.parent_path().filename().string() + "/" + current_path.filename().string();
-                break;
-            case InfoFormats::LONG:
-                work_name = std::filesystem::relative(current_path, root).string();
-                break;
-            default:
-                break;
-        } 
+        case InfoFormats::SHORT:
+            work_name = current_path.parent_path().filename().string() + "/" + current_path.filename().string();
+            break;
+        case InfoFormats::LONG:
+            work_name = std::filesystem::relative(current_path, root).string();
+            break;
+        default:
+            break;
+        }
         std::ostringstream infostr;
         infostr << "[" << image_files.get_index() + 1 << "/" << image_files.size() << "] " << work_name;
         constexpr int dist = 7;
@@ -316,12 +342,13 @@ void Imgview::keyboard_callback(uint32_t key, gawl::ButtonState state) {
         {Actions::PREV_WORK, {KEY_PAGEUP}, true},
         {Actions::NEXT_PAGE, {KEY_X, KEY_RIGHT, KEY_SPACE}, true},
         {Actions::PREV_PAGE, {KEY_Z, KEY_LEFT, KEY_SPACE}, true},
+        {Actions::REFRESH_FILES, {KEY_R}, false},
         {Actions::PAGE_SELECT_ON, {KEY_P}, false, [this]() -> bool { return !page_select; }},
         {Actions::PAGE_SELECT_OFF, {KEY_ESC, KEY_P}, false, [this]() -> bool { return page_select; }},
         {Actions::PAGE_SELECT_NUM, num_keys, true, [this]() -> bool { return page_select; }},
         {Actions::PAGE_SELECT_NUM_DEL, {KEY_BACKSPACE}, false, [this]() -> bool { return page_select; }},
         {Actions::PAGE_SELECT_APPLY, {KEY_ENTER}, false, [this]() -> bool { return page_select; }},
-        {Actions::TOGGL_SHOW_INFO, {KEY_F}, false},
+        {Actions::TOGGLE_SHOW_INFO, {KEY_F}, false},
         {Actions::MOVE_DRAW_POS, {KEY_H, KEY_J, KEY_K, KEY_L}, false},
         {Actions::RESET_DRAW_POS, {KEY_0}, false},
         {Actions::FIT_WIDTH, {KEY_1}, false},
