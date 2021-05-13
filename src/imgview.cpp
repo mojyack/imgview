@@ -464,6 +464,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
                     }
                 }
             } else {
+                refresh();
                 loader_event.wait();
             }
         }
