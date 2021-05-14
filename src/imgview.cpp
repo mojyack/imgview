@@ -249,6 +249,15 @@ void Imgview::start_loading(const bool reverse) {
     current.wants_path   = image_files.get_current();
     current.needs_reload = true;
 
+    // check preload
+    for(auto& i : images.data) {
+        if(current.wants_path == i.current_path) {
+            current.buffer       = std::move(i.buffer);
+            current.current_path = std::move(i.current_path);
+            break;
+        }
+    }
+
     // load preload
     const size_t index = image_files.get_index();
     if(index != (reverse ? 0 : image_files.size() - 1)) {
@@ -435,19 +444,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
                     if(i.wants_path == i.current_path || i.wants_path.empty()) {
                         continue;
                     }
-                    bool found = false;
-                    for(auto& o : images.data) {
-                        if(i.wants_path == o.current_path) {
-                            i.buffer       = std::move(o.buffer);
-                            i.current_path = std::move(o.current_path);
-                            found          = true;
-                            break;
-                        }
-                    }
-                    if(!found) {
-                        loading = i.wants_path;
-                        break;
-                    }
+                    loading = i.wants_path;
                 }
             }
             if(!loading.empty()) {
@@ -464,7 +461,6 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
                     }
                 }
             } else {
-                refresh();
                 loader_event.wait();
             }
         }
