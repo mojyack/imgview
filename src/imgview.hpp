@@ -4,7 +4,8 @@
 #include <fstream>
 #include <string>
 
-#include "gawl/gawl.hpp"
+#include <gawl.hpp>
+
 #include "indexed-paths.hpp"
 
 struct Image {
