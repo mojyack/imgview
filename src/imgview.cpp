@@ -150,6 +150,7 @@ void Imgview::do_action(Actions action, uint32_t key) {
             auto files = get_sorted_images(image_files.get_base().data());
             if(auto p = std::atoi(page_select_buffer.data()) - 1; p >= 0 && static_cast<long unsigned int>(p) < files.size()) {
                 image_files = std::move(files);
+                image_files.set_index(p);
                 start_loading(false);
             }
         }
