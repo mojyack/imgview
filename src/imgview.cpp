@@ -186,12 +186,15 @@ void Imgview::do_action(Actions action, uint32_t key) {
         {
             std::lock_guard<std::mutex> lock(images.mutex);
 
-            auto& current = images.data[0];
+            const auto& current = images.data[0];
             if(current.wants_path != current.current_path) {
                 break;
             }
             reset_draw_pos();
-            draw_scale = (action == Actions::FIT_WIDTH) ? 1. * get_window_size()[0] / current.graphic.get_width(this) : 1. * get_window_size()[1] / current.graphic.get_height(this);
+            const auto  size  = std::array{current.graphic.get_width(this), current.graphic.get_height(this)};
+            const auto& wsize = get_window_size();
+            const auto  area  = gawl::calc_fit_rect({0, 0, 1. * wsize[0], 1. * wsize[1]}, size[0], size[1]);
+            draw_scale        = action == Actions::FIT_WIDTH ? (wsize[0] - area.width()) / size[0] : (wsize[1] - area.height()) / size[1];
         }
         refresh();
     } break;
@@ -203,9 +206,9 @@ void Imgview::reset_draw_pos() {
     draw_scale     = 0.0;
 }
 gawl::Area Imgview::calc_draw_area(const gawl::Graphic& graphic) const {
-    const int    size[2] = {graphic.get_width(this), graphic.get_height(this)};
-    const double exp[2]  = {size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
-    auto         area    = gawl::calc_fit_rect({0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, size[0], size[1]);
+    const auto size = std::array{graphic.get_width(this), graphic.get_height(this)};
+    const auto exp  = std::array{size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
+    auto       area = gawl::calc_fit_rect({0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, size[0], size[1]);
     area[0] += draw_offset[0] - exp[0];
     area[1] += draw_offset[1] - exp[1];
     area[2] += draw_offset[0] + exp[0];
@@ -215,7 +218,7 @@ gawl::Area Imgview::calc_draw_area(const gawl::Graphic& graphic) const {
 void Imgview::zoom_draw_pos(double value, double (&origin)[2]) {
     std::lock_guard<std::mutex> lock(images.mutex);
 
-    auto& current = images.data[0];
+    const auto& current = images.data[0];
     if(current.wants_path != current.current_path) {
         return;
     }
@@ -288,7 +291,9 @@ void Imgview::refresh_callback() {
         }
     }
     auto& current = images.data[0].graphic;
-    current.draw_rect(this, calc_draw_area(current));
+    if(current) {
+        current.draw_rect(this, calc_draw_area(current));
+    }
     if(!current_loaded) {
         info_font.draw_fit_rect(this, {0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, {1, 1, 1, 1}, "loading...");
     }
@@ -414,7 +419,7 @@ void Imgview::scroll_callback(gawl::WheelAxis /* axis */, double value) {
     zoom_draw_pos(rate * std::pow(value, 3), pointer_pos);
     refresh();
 }
-Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWindow(app) {
+Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWindow(app, {.title = "Imgview"}) {
     set_event_driven(true);
     if(!std::filesystem::exists(path)) {
         quit_application();
