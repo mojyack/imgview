@@ -171,9 +171,9 @@ void Imgview::do_action(Actions action, uint32_t key) {
         break;
     case Actions::MOVE_DRAW_POS: {
         constexpr double SPEED = 60;
-        draw_offset[0] += key == KEY_H ? SPEED : key == KEY_L ? -SPEED
+        draw_offset[0] += key == KEY_L ? SPEED : key == KEY_H ? -SPEED
                                                               : 0;
-        draw_offset[1] += key == KEY_K ? SPEED : key == KEY_J ? -SPEED
+        draw_offset[1] += key == KEY_J ? SPEED : key == KEY_K ? -SPEED
                                                               : 0;
         refresh();
     } break;
@@ -184,8 +184,7 @@ void Imgview::do_action(Actions action, uint32_t key) {
     case Actions::FIT_WIDTH:
     case Actions::FIT_HEIGHT: {
         {
-            std::lock_guard<std::mutex> lock(images.mutex);
-
+            const auto  lock    = images.get_lock();
             const auto& current = images.data[0];
             if(current.wants_path != current.current_path) {
                 break;
@@ -216,8 +215,7 @@ gawl::Area Imgview::calc_draw_area(const gawl::Graphic& graphic) const {
     return area;
 }
 void Imgview::zoom_draw_pos(double value, double (&origin)[2]) {
-    std::lock_guard<std::mutex> lock(images.mutex);
-
+    const auto  lock    = images.get_lock();
     const auto& current = images.data[0];
     if(current.wants_path != current.current_path) {
         return;
@@ -245,10 +243,9 @@ bool Imgview::check_existence(const bool reverse) {
     return false;
 }
 void Imgview::start_loading(const bool reverse) {
-    std::lock_guard<std::mutex> lock(images.mutex);
-
-    auto& current        = images.data[0];
-    auto& preload        = images.data[1];
+    const auto lock      = images.get_lock();
+    auto&      current   = images.data[0];
+    auto&      preload   = images.data[1];
     current.wants_path   = image_files.get_current();
     current.needs_reload = true;
 
@@ -277,9 +274,8 @@ void Imgview::refresh_callback() {
 
     bool current_loaded = true;
     {
-        std::lock_guard<std::mutex> lock(images.mutex);
-
-        auto& current = images.data[0];
+        const auto lock    = images.get_lock();
+        auto&      current = images.data[0];
         if(current.needs_reload) {
             if(current.wants_path == current.current_path) {
                 current.graphic = gawl::Graphic(current.buffer);
@@ -444,7 +440,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
         while(is_running()) {
             std::string loading;
             {
-                std::lock_guard<std::mutex> lock(images.mutex);
+                const auto lock = images.get_lock();
                 for(auto& i : images.data) {
                     if(i.wants_path == i.current_path || i.wants_path.empty()) {
                         continue;
@@ -455,7 +451,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
             if(!loading.empty()) {
                 auto buffer = gawl::PixelBuffer(loading.data(), gawl::GraphicLoader::DEVIL);
                 {
-                    std::lock_guard<std::mutex> lock(images.mutex);
+                    const auto lock = images.get_lock();
                     for(auto& i : images.data) {
                         if(i.wants_path == loading) {
                             i.buffer       = std::move(buffer);
