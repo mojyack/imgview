@@ -6,26 +6,26 @@
 
 namespace {
 template <typename T, typename E>
-bool contains(const T& vec, const E& elm) {
+auto contains(const T& vec, const E& elm) -> bool {
     return std::find(vec.begin(), vec.end(), elm) != vec.end();
 }
-bool is_image_file(const char* path) {
-    constexpr std::array EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"};
+auto is_image_file(const char* const path) -> bool {
+    constexpr auto EXTENSIONS = std::array{".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"};
     if(!std::filesystem::is_regular_file(path)) {
         return false;
     }
     const auto extension = Path(path).extension().string();
     return contains(EXTENSIONS, extension);
 }
-IndexedPaths list_files(const char* path) {
-    IndexedPaths files(path);
+auto list_files(const char* const path) -> IndexedPaths {
+    auto files = IndexedPaths(path);
     for(const std::filesystem::directory_entry& it : std::filesystem::directory_iterator(path)) {
         files.append(it.path().filename().string());
     }
     files.sort();
     return files;
 }
-std::optional<IndexedPaths> get_next_file(const IndexedPaths& files, const char* current, const bool reverse) {
+auto get_next_file(const IndexedPaths& files, const char* const current, const bool reverse) -> std::optional<IndexedPaths> {
     if(auto p = std::find(files.begin(), files.end(), Path(current).filename().string()); p == files.end() || p == (reverse ? files.begin() : files.end() - 1)) {
         return std::nullopt;
     } else {
@@ -34,7 +34,7 @@ std::optional<IndexedPaths> get_next_file(const IndexedPaths& files, const char*
         return new_files;
     }
 }
-std::optional<std::string> get_next_directory_recursive(const char* path, const bool reverse, const bool skip_current, const char* root) {
+auto get_next_directory_recursive(const char* const path, const bool reverse, const bool skip_current, const char* const root) -> std::optional<std::string> {
     if(std::strcmp(path, "/") == 0) {
         return std::nullopt;
     }
@@ -46,9 +46,9 @@ std::optional<std::string> get_next_directory_recursive(const char* path, const 
     }
 
     // check directories in same level.
-    const auto  directories = get_sorted_directories(Path(path).parent_path().string().data());
-    auto        next        = get_next_file(directories, path, reverse);
-    std::string viewable;
+    const auto directories = get_sorted_directories(Path(path).parent_path().string().data());
+    auto       next        = get_next_file(directories, path, reverse);
+    auto       viewable    = std::string();
     while(next.has_value()) {
         if(auto r = find_viewable_directory(next->get_current().data())) {
             viewable = r.value();
@@ -69,7 +69,7 @@ std::optional<std::string> get_next_directory_recursive(const char* path, const 
 }
 } // namespace
 
-std::optional<std::string> find_viewable_directory(const char* path, const bool skip_current) {
+auto find_viewable_directory(const char* const path, const bool skip_current) -> std::optional<std::string> {
     const auto files = list_files(path);
     if(!skip_current) {
         for(const auto& p : files) {
@@ -89,24 +89,24 @@ std::optional<std::string> find_viewable_directory(const char* path, const bool 
     }
     return std::nullopt;
 }
-IndexedPaths get_sorted_images(const char* path) {
+auto get_sorted_images(const char* const path) -> IndexedPaths {
     auto files = list_files(path);
     files.filter([](const std::string& path) {
         return !is_image_file(path.data());
     });
     return files;
 }
-IndexedPaths get_sorted_directories(const char* path) {
+auto get_sorted_directories(const char* const path) -> IndexedPaths {
     auto files = list_files(path);
     files.filter([](const std::string& path) {
         return !std::filesystem::is_directory(path.data());
     });
     return files;
 }
-std::optional<IndexedPaths> get_next_image_file(const char* path, const bool reverse) {
+auto get_next_image_file(const char* const path, const bool reverse) -> std::optional<IndexedPaths> {
     const auto images = get_sorted_images(Path(path).parent_path().string().data());
     return get_next_file(images, path, reverse);
 }
-std::optional<std::string> get_next_directory(const char* path, const bool reverse, const char* root) {
+auto get_next_directory(const char* const path, const bool reverse, const char* const root) -> std::optional<std::string> {
     return get_next_directory_recursive(path, reverse, false, root);
 }

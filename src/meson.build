@@ -1,1 +1,7 @@
-imgview_files =  files('main.cpp', 'imgview.cpp', 'sort.cpp', 'path.cpp', 'indexed-paths.cpp')
+imgview_files =  files(
+    'imgview.cpp',
+    'indexed-paths.cpp',
+    'main.cpp',
+    'path.cpp',
+    'sort.cpp',
+)

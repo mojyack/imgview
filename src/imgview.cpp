@@ -15,11 +15,11 @@ enum class PathCheckResult {
     FATAL,
 };
 
-PathCheckResult check_and_retrive_paths(const char* root, IndexedPaths& files, const bool reverse) {
+auto check_and_retrieve_paths(const char* const root, IndexedPaths& files, const bool reverse) -> PathCheckResult {
     if(std::filesystem::exists(files.get_current())) {
         return PathCheckResult::EXISTS;
     }
-    bool images  = true;
+    auto images  = true;
     auto missing = Path(files.get_current());
     auto path    = missing.parent_path();
     while(1) {
@@ -35,14 +35,14 @@ PathCheckResult check_and_retrive_paths(const char* root, IndexedPaths& files, c
             auto       file_names   = updated.get_file_names();
             file_names.emplace_back(missing_name);
             sort_string(file_names);
-            size_t     index            = std::distance(file_names.begin(), std::find(file_names.begin(), file_names.end(), missing_name));
-            const bool selectable_front = (index != (file_names.size() - 1));
-            const bool selectable_back  = (index != 0);
+            auto       index            = static_cast<size_t>(std::distance(file_names.begin(), std::find(file_names.begin(), file_names.end(), missing_name)));
+            const auto selectable_front = (index != (file_names.size() - 1));
+            const auto selectable_back  = (index != 0);
             file_names.erase(file_names.begin() + index);
             index += (reverse && selectable_back) ? -1 : (!reverse && selectable_front) ? 0
                                                      : selectable_front                 ? -1
                                                                                         : 0;
-            auto paths = IndexedPaths(path.string(), file_names, index);
+            const auto paths = IndexedPaths(path.string(), file_names, index);
             if(images) {
                 files = std::move(paths);
             } else {
@@ -64,7 +64,7 @@ PathCheckResult check_and_retrive_paths(const char* root, IndexedPaths& files, c
 }
 } // namespace
 
-void Imgview::do_action(Actions action, uint32_t key) {
+auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
     switch(action) {
     case Actions::NONE:
         break;
@@ -73,9 +73,9 @@ void Imgview::do_action(Actions action, uint32_t key) {
         break;
     case Actions::NEXT_WORK:
     case Actions::PREV_WORK: {
-        const bool reverse = action == Actions::PREV_WORK;
+        const auto reverse = action == Actions::PREV_WORK;
         if(check_existence(reverse)) {
-            if(auto next_directory = get_next_directory(image_files.get_base().data(), action == Actions::PREV_WORK, root.data())) {
+            if(const auto next_directory = get_next_directory(image_files.get_base().data(), action == Actions::PREV_WORK, root.data())) {
                 image_files = get_sorted_images(next_directory->data());
                 start_loading(false);
                 refresh();
@@ -84,9 +84,9 @@ void Imgview::do_action(Actions action, uint32_t key) {
     } break;
     case Actions::NEXT_PAGE:
     case Actions::PREV_PAGE: {
-        const bool reverse    = action == Actions::PREV_PAGE;
-        bool       do_update  = true;
-        bool       do_refresh = false;
+        const auto reverse    = action == Actions::PREV_PAGE;
+        auto       do_update  = true;
+        auto       do_refresh = false;
         do {
             const auto current_index = image_files.get_index();
             if((!reverse && current_index + 1 >= image_files.size()) || (reverse && current_index <= 0)) {
@@ -129,13 +129,7 @@ void Imgview::do_action(Actions action, uint32_t key) {
         refresh();
         break;
     case Actions::PAGE_SELECT_NUM:
-        char c;
-        if(key != KEY_0) {
-            c = static_cast<char>('1' + key - KEY_1);
-        } else {
-            c = '0';
-        }
-        page_select_buffer += c;
+        page_select_buffer += (key == KEY_0 ? '0' : static_cast<char>('1' + key - KEY_1));
         refresh();
         break;
     case Actions::PAGE_SELECT_NUM_DEL:
@@ -147,8 +141,8 @@ void Imgview::do_action(Actions action, uint32_t key) {
     case Actions::PAGE_SELECT_APPLY: {
         page_select = false;
         if(check_existence(false)) {
-            auto files = get_sorted_images(image_files.get_base().data());
-            if(auto p = std::atoi(page_select_buffer.data()) - 1; p >= 0 && static_cast<long unsigned int>(p) < files.size()) {
+            const auto files = get_sorted_images(image_files.get_base().data());
+            if(const auto p = std::atoi(page_select_buffer.data()) - 1; p >= 0 && static_cast<long unsigned int>(p) < files.size()) {
                 image_files = std::move(files);
                 image_files.set_index(p);
                 start_loading(false);
@@ -200,12 +194,12 @@ void Imgview::do_action(Actions action, uint32_t key) {
     } break;
     }
 }
-void Imgview::reset_draw_pos() {
+auto Imgview::reset_draw_pos() -> void {
     draw_offset[0] = 0;
     draw_offset[1] = 0;
     draw_scale     = 0.0;
 }
-gawl::Area Imgview::calc_draw_area(const gawl::Graphic& graphic) const {
+auto Imgview::calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Area {
     const auto size = std::array{graphic.get_width(this), graphic.get_height(this)};
     const auto exp  = std::array{size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
     auto       area = gawl::calc_fit_rect({0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, size[0], size[1]);
@@ -215,22 +209,22 @@ gawl::Area Imgview::calc_draw_area(const gawl::Graphic& graphic) const {
     area[3] += draw_offset[1] + exp[1];
     return area;
 }
-void Imgview::zoom_draw_pos(double value, double (&origin)[2]) {
+auto Imgview::zoom_draw_pos(const double value, double (&origin)[2]) -> void {
     const auto  lock    = images.get_lock();
     const auto& current = images.data[0];
     if(current.wants_path != current.current_path) {
         return;
     }
-    const auto   area     = calc_draw_area(current.graphic);
-    const double delta[2] = {current.graphic.get_width(this) * value, current.graphic.get_height(this) * value};
-    for(int i = 0; i < 2; ++i) {
+    const auto area  = calc_draw_area(current.graphic);
+    const auto delta = std::array{current.graphic.get_width(this) * value, current.graphic.get_height(this) * value};
+    for(int i = 0; i < 2; i += 1) {
         const double center = area[i] + (area[i + 2] - area[i]) / 2;
         draw_offset[i] += ((center - origin[i]) / (area[i + 2] - area[i])) * delta[i];
     }
     draw_scale += value;
 }
-bool Imgview::check_existence(const bool reverse) {
-    switch(check_and_retrive_paths(root.data(), image_files, reverse)) {
+auto Imgview::check_existence(const bool reverse) -> bool {
+    switch(check_and_retrieve_paths(root.data(), image_files, reverse)) {
     case PathCheckResult::EXISTS:
         return true;
     case PathCheckResult::RETRIEVED:
@@ -243,7 +237,7 @@ bool Imgview::check_existence(const bool reverse) {
     }
     return false;
 }
-void Imgview::start_loading(const bool reverse) {
+auto Imgview::start_loading(const bool reverse) -> void {
     const auto lock      = images.get_lock();
     auto&      current   = images.data[0];
     auto&      preload   = images.data[1];
@@ -260,7 +254,7 @@ void Imgview::start_loading(const bool reverse) {
     }
 
     // load preload
-    const size_t index = image_files.get_index();
+    const auto index = image_files.get_index();
     if(index != (reverse ? 0 : image_files.size() - 1)) {
         preload.wants_path   = image_files[index + (reverse ? -1 : 1)];
         preload.needs_reload = true;
@@ -270,10 +264,10 @@ void Imgview::start_loading(const bool reverse) {
 
     loader_event.wakeup();
 }
-void Imgview::refresh_callback() {
+auto Imgview::refresh_callback() -> void {
     gawl::clear_screen({0, 0, 0, 0});
 
-    bool current_loaded = true;
+    auto current_loaded = true;
     {
         const auto lock    = images.get_lock();
         auto&      current = images.data[0];
@@ -295,10 +289,10 @@ void Imgview::refresh_callback() {
         info_font.draw_fit_rect(this, {0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, {1, 1, 1, 1}, "loading...");
     }
     if(page_select) {
-        constexpr const char* pagestr       = "Page: ";
-        static int            pagestr_width = -1;
+        constexpr auto pagestr       = "Page: ";
+        static auto    pagestr_width = int(-1);
 
-        constexpr int dist = 45;
+        constexpr auto dist = 45;
         if(pagestr_width == -1) {
             gawl::Area rec;
             page_select_font.get_rect(this, rec, pagestr);
@@ -309,8 +303,8 @@ void Imgview::refresh_callback() {
         page_select_font.draw(this, 5 + pagestr_width, size[1] - dist, {1, 1, 1, 1}, page_select_buffer.data());
     }
     if(info_format != InfoFormats::NONE) {
-        const auto  current_path = Path(image_files.get_current());
-        std::string work_name;
+        const auto current_path = Path(image_files.get_current());
+        auto       work_name    = std::string();
         switch(info_format) {
         case InfoFormats::SHORT:
             work_name = current_path.parent_path().filename().string() + "/" + current_path.filename().string();
@@ -321,24 +315,24 @@ void Imgview::refresh_callback() {
         default:
             break;
         }
-        std::ostringstream infostr;
+        auto infostr = std::ostringstream();
         infostr << "[" << image_files.get_index() + 1 << "/" << image_files.size() << "] " << work_name;
-        constexpr int dist = 7;
-        const auto&   size = get_window_size();
+        constexpr auto dist = 7;
+        const auto&    size = get_window_size();
         {
-            gawl::Area rec = {5.0, static_cast<double>(size[1] - dist)};
-            double     sp  = 3;
+            auto rec = gawl::Area{5.0, static_cast<double>(size[1] - dist)};
+            auto sp  = 3.0;
             info_font.get_rect(this, rec, infostr.str().data());
             gawl::draw_rect(this, {rec[0] - sp, rec[1] - sp, rec[2] + sp, rec[3] + sp}, {0, 0, 0, 0.5});
         }
         info_font.draw(this, 5, size[1] - dist, {1, 1, 1, 0.7}, infostr.str().data());
     }
 }
-void Imgview::window_resize_callback() {
+auto Imgview::window_resize_callback() -> void {
     reset_draw_pos();
 }
-void Imgview::keyboard_callback(uint32_t key, gawl::ButtonState state) {
-    const static std::vector<uint32_t> num_keys = {KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9};
+auto Imgview::keyboard_callback(const uint32_t key, const gawl::ButtonState state) -> void {
+    const static auto num_keys = std::vector<uint32_t>{KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9};
     struct KeyBind {
         Actions                   action;
         std::vector<uint32_t>     keys;
@@ -365,7 +359,7 @@ void Imgview::keyboard_callback(uint32_t key, gawl::ButtonState state) {
         {Actions::FIT_WIDTH, {KEY_1}, false},
         {Actions::FIT_HEIGHT, {KEY_2}, false},
     };
-    Actions action = Actions::NONE;
+    auto action = Actions::NONE;
     if(key == KEY_LEFTSHIFT || key == KEY_RIGHTSHIFT) {
         shift = state == gawl::ButtonState::press;
         return;
@@ -384,7 +378,7 @@ void Imgview::keyboard_callback(uint32_t key, gawl::ButtonState state) {
     }
     do_action(action, key);
 }
-void Imgview::pointermove_callback(double x, double y) {
+auto Imgview::pointermove_callback(const double x, const double y) -> void {
     if(pointer_pos[0] != -1 && pointer_pos[1] != -1) {
         if(clicked[0]) {
             draw_offset[0] += x - pointer_pos[0];
@@ -400,8 +394,10 @@ void Imgview::pointermove_callback(double x, double y) {
     pointer_pos[1] = y;
     moved          = true;
 }
-void Imgview::click_callback(uint32_t button, gawl::ButtonState state) {
-    if(button != BTN_LEFT && button != BTN_RIGHT) return;
+auto Imgview::click_callback(const uint32_t button, const gawl::ButtonState state) -> void {
+    if(button != BTN_LEFT && button != BTN_RIGHT) {
+        return;
+    }
     clicked[button == BTN_RIGHT]        = state == gawl::ButtonState::press;
     clicked_pos[button == BTN_RIGHT][0] = pointer_pos[0];
     clicked_pos[button == BTN_RIGHT][1] = pointer_pos[1];
@@ -410,13 +406,15 @@ void Imgview::click_callback(uint32_t button, gawl::ButtonState state) {
     }
     moved = false;
 }
-void Imgview::scroll_callback(gawl::WheelAxis /* axis */, double value) {
-    constexpr double rate = 0.00001;
-    if(pointer_pos[0] == -1 || pointer_pos[1] == -1) return;
+auto Imgview::scroll_callback(gawl::WheelAxis /* axis */, double value) -> void {
+    constexpr auto rate = 0.00001;
+    if(pointer_pos[0] == -1 || pointer_pos[1] == -1) {
+        return;
+    }
     zoom_draw_pos(rate * std::pow(value, 3), pointer_pos);
     refresh();
 }
-Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWindow(app, {.title = "Imgview"}) {
+Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::WaylandWindow(app, {.title = "Imgview"}) {
     set_event_driven(true);
     if(!std::filesystem::exists(path)) {
         quit_application();
@@ -439,7 +437,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* path) : gawl::WaylandWi
 
     loader_thread = std::thread([this]() {
         while(is_running()) {
-            std::string loading;
+            auto loading = std::string();
             {
                 const auto lock = images.get_lock();
                 for(auto& i : images.data) {

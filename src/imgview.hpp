@@ -64,19 +64,19 @@ class Imgview : public gawl::WaylandWindow {
     double      clicked_pos[2][2] = {};
     double      pointer_pos[2]    = {-1, -1};
 
-    void       do_action(Actions action, uint32_t key = KEY_RESERVED);
-    void       reset_draw_pos();
-    gawl::Area calc_draw_area(const gawl::Graphic& graphic) const;
-    void       zoom_draw_pos(double value, double (&origin)[2]);
-    bool       check_existence(const bool reverse);
-    void       start_loading(const bool reverse);
+    auto do_action(Actions action, uint32_t key = KEY_RESERVED) -> void;
+    auto reset_draw_pos() -> void;
+    auto calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Area;
+    auto zoom_draw_pos(double value, double (&origin)[2]) -> void;
+    auto check_existence(bool reverse) -> bool;
+    auto start_loading(bool reverse) -> void;
 
-    void refresh_callback() override;
-    void window_resize_callback() override;
-    void keyboard_callback(uint32_t key, gawl::ButtonState state) override;
-    void pointermove_callback(double x, double y) override;
-    void click_callback(uint32_t button, gawl::ButtonState state) override;
-    void scroll_callback(gawl::WheelAxis axis, double value) override;
+    auto refresh_callback() -> void override;
+    auto window_resize_callback() -> void override;
+    auto keyboard_callback(uint32_t key, gawl::ButtonState state) -> void override;
+    auto pointermove_callback(double x, double y) -> void override;
+    auto click_callback(uint32_t button, gawl::ButtonState state) -> void override;
+    auto scroll_callback(gawl::WheelAxis axis, double value) -> void override;
 
   public:
     Imgview(gawl::GawlApplication& app, const char* path);

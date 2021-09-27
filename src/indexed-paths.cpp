@@ -1,66 +1,66 @@
 #include "indexed-paths.hpp"
 #include "sort.hpp"
 
-void IndexedPaths::sort() {
+auto IndexedPaths::sort() -> void {
     sort_string(files);
 }
-void IndexedPaths::filter(const std::function<bool(const std::string&)>& pred) {
+auto IndexedPaths::filter(const std::function<bool(const std::string&)>& pred) -> void {
     std::erase_if(files, [this, &pred](const std::string& path) {
         std::string full = base + "/" + path;
         return pred(full);
     });
 }
-void IndexedPaths::append(const std::string& path) {
+auto IndexedPaths::append(const std::string& path) -> void {
     files.emplace_back(path);
 }
-std::string IndexedPaths::get_full_path(const char* filename) const {
+auto IndexedPaths::get_full_path(const char* filename) const -> std::string {
     return base + "/" + filename;
 }
-size_t IndexedPaths::get_index() const {
+auto IndexedPaths::get_index() const -> size_t {
     return index;
 }
-bool IndexedPaths::set_index(const size_t i) {
+auto IndexedPaths::set_index(const size_t i) -> bool {
     if(i < files.size()) {
         index = i;
         return true;
     }
     return false;
 }
-bool IndexedPaths::set_index_by_name(const char* filename) {
+auto IndexedPaths::set_index_by_name(const char* const filename) -> bool {
     if(auto p = std::find(files.begin(), files.end(), filename); p != files.end()) {
         index = std::distance(files.begin(), p);
         return true;
     }
     return false;
 }
-std::string IndexedPaths::get_current() const {
+auto IndexedPaths::get_current() const -> std::string {
     return this->operator[](index);
 }
-const std::string& IndexedPaths::get_base() const {
+auto IndexedPaths::get_base() const -> const std::string& {
     return base;
 }
-const IndexedPaths::Files& IndexedPaths::get_file_names() const {
+auto IndexedPaths::get_file_names() const -> const IndexedPaths::Files& {
     return files;
 }
-size_t IndexedPaths::size() const {
+auto IndexedPaths::size() const -> size_t {
     return files.size();
 }
-bool IndexedPaths::empty() const {
+auto IndexedPaths::empty() const -> bool {
     return files.empty();
 }
-std::string IndexedPaths::operator[](const size_t index) const {
+auto IndexedPaths::operator[](const size_t index) const -> std::string {
     return get_full_path(files[index].data());
 }
-IndexedPaths::Iterator IndexedPaths::begin() {
+auto IndexedPaths::begin() -> IndexedPaths::Iterator {
     return files.begin();
 }
-IndexedPaths::Iterator IndexedPaths::end() {
+auto IndexedPaths::end() -> IndexedPaths::Iterator {
     return files.end();
 }
-IndexedPaths::ConstIterator IndexedPaths::begin() const {
+auto IndexedPaths::begin() const -> IndexedPaths::ConstIterator {
     return files.cbegin();
 }
-IndexedPaths::ConstIterator IndexedPaths::end() const {
+auto IndexedPaths::end() const -> IndexedPaths::ConstIterator {
     return files.cend();
 }
 IndexedPaths::IndexedPaths(const std::string& base) : base(base) {}

@@ -2,4 +2,4 @@
 #include <vector>
 #include <string>
 
-void sort_string(std::vector<std::string>& strings);
+auto sort_string(std::vector<std::string>& strings) -> void;
