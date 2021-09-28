@@ -448,7 +448,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::Way
                 }
             }
             if(!loading.empty()) {
-                auto buffer = gawl::PixelBuffer(loading.data(), gawl::GraphicLoader::DEVIL);
+                auto buffer = gawl::PixelBuffer(loading.data());
                 {
                     const auto lock = images.get_lock();
                     for(auto& i : images.data) {
