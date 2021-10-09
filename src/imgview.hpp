@@ -4,7 +4,7 @@
 #include <fstream>
 #include <string>
 
-#include <gawl.hpp>
+#include <gawl/gawl.hpp>
 
 #include "indexed-paths.hpp"
 
@@ -66,7 +66,7 @@ class Imgview : public gawl::WaylandWindow {
 
     auto do_action(Actions action, uint32_t key = KEY_RESERVED) -> void;
     auto reset_draw_pos() -> void;
-    auto calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Area;
+    auto calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Rectangle;
     auto zoom_draw_pos(double value, double (&origin)[2]) -> void;
     auto check_existence(bool reverse) -> bool;
     auto start_loading(bool reverse) -> void;

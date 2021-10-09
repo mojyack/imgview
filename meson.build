@@ -3,5 +3,5 @@ project('imgview', 'cpp', version : '1.0.1', default_options : ['warning_level=3
 subdir('src')
 
 executable('imgview', [imgview_files],
-            dependencies : [dependency('gawl', version : ['>=1.1', '<1.2'])],
+            dependencies : [dependency('gawl', version : ['>=1.2', '<1.3'])],
             install : true)

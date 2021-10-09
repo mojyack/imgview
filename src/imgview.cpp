@@ -187,7 +187,7 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
             reset_draw_pos();
             const auto  size  = std::array{current.graphic.get_width(this), current.graphic.get_height(this)};
             const auto& wsize = get_window_size();
-            const auto  area  = gawl::calc_fit_rect({0, 0, 1. * wsize[0], 1. * wsize[1]}, size[0], size[1]);
+            const auto  area  = gawl::calc_fit_rect({{0, 0}, {1. * wsize[0], 1. * wsize[1]}}, size[0], size[1]);
             draw_scale        = action == Actions::FIT_WIDTH ? (wsize[0] - area.width()) / size[0] : (wsize[1] - area.height()) / size[1];
         }
         refresh();
@@ -199,14 +199,14 @@ auto Imgview::reset_draw_pos() -> void {
     draw_offset[1] = 0;
     draw_scale     = 0.0;
 }
-auto Imgview::calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Area {
+auto Imgview::calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Rectangle {
     const auto size = std::array{graphic.get_width(this), graphic.get_height(this)};
     const auto exp  = std::array{size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
-    auto       area = gawl::calc_fit_rect({0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, size[0], size[1]);
-    area[0] += draw_offset[0] - exp[0];
-    area[1] += draw_offset[1] - exp[1];
-    area[2] += draw_offset[0] + exp[0];
-    area[3] += draw_offset[1] + exp[1];
+    auto       area = gawl::calc_fit_rect({{0, 0}, {1. * get_window_size()[0], 1. * get_window_size()[1]}}, size[0], size[1]);
+    area.a.x += draw_offset[0] - exp[0];
+    area.a.y += draw_offset[1] - exp[1];
+    area.b.x += draw_offset[0] + exp[0];
+    area.b.y += draw_offset[1] + exp[1];
     return area;
 }
 auto Imgview::zoom_draw_pos(const double value, double (&origin)[2]) -> void {
@@ -215,12 +215,12 @@ auto Imgview::zoom_draw_pos(const double value, double (&origin)[2]) -> void {
     if(current.wants_path != current.current_path) {
         return;
     }
-    const auto area  = calc_draw_area(current.graphic);
-    const auto delta = std::array{current.graphic.get_width(this) * value, current.graphic.get_height(this) * value};
-    for(int i = 0; i < 2; i += 1) {
-        const double center = area[i] + (area[i + 2] - area[i]) / 2;
-        draw_offset[i] += ((center - origin[i]) / (area[i + 2] - area[i])) * delta[i];
-    }
+    const auto   area     = calc_draw_area(current.graphic);
+    const auto   delta    = std::array{current.graphic.get_width(this) * value, current.graphic.get_height(this) * value};
+    const double center_x = area.a.x + area.width() / 2;
+    const double center_y = area.a.y + area.height() / 2;
+    draw_offset[0] += (center_x - origin[0]) / area.width() * delta[0];
+    draw_offset[1] += (center_y - origin[1]) / area.height() * delta[1];
     draw_scale += value;
 }
 auto Imgview::check_existence(const bool reverse) -> bool {
@@ -286,7 +286,7 @@ auto Imgview::refresh_callback() -> void {
         current.draw_rect(this, calc_draw_area(current));
     }
     if(!current_loaded) {
-        info_font.draw_fit_rect(this, {0, 0, 1. * get_window_size()[0], 1. * get_window_size()[1]}, {1, 1, 1, 1}, "loading...");
+        info_font.draw_fit_rect(this, {{0, 0}, {1. * get_window_size()[0], 1. * get_window_size()[1]}}, {1, 1, 1, 1}, "loading...");
     }
     if(page_select) {
         constexpr auto pagestr       = "Page: ";
@@ -294,13 +294,11 @@ auto Imgview::refresh_callback() -> void {
 
         constexpr auto dist = 45;
         if(pagestr_width == -1) {
-            gawl::Area rec;
-            page_select_font.get_rect(this, rec, pagestr);
-            pagestr_width = rec[2] - rec[0];
+            pagestr_width = page_select_font.get_rect(this, {0, 0}, pagestr).width();
         }
         const auto& size = get_window_size();
-        page_select_font.draw(this, 5, size[1] - dist, {1, 1, 1, 1}, pagestr);
-        page_select_font.draw(this, 5 + pagestr_width, size[1] - dist, {1, 1, 1, 1}, page_select_buffer.data());
+        page_select_font.draw(this, {5, 1. * size[1] - dist}, {1, 1, 1, 1}, pagestr);
+        page_select_font.draw(this, {1. * 5 + pagestr_width, 1. * size[1] - dist}, {1, 1, 1, 1}, page_select_buffer.data());
     }
     if(info_format != InfoFormats::NONE) {
         const auto current_path = Path(image_files.get_current());
@@ -320,12 +318,11 @@ auto Imgview::refresh_callback() -> void {
         constexpr auto dist = 7;
         const auto&    size = get_window_size();
         {
-            auto rec = gawl::Area{5.0, static_cast<double>(size[1] - dist)};
-            auto sp  = 3.0;
-            info_font.get_rect(this, rec, infostr.str().data());
-            gawl::draw_rect(this, {rec[0] - sp, rec[1] - sp, rec[2] + sp, rec[3] + sp}, {0, 0, 0, 0.5});
+            constexpr auto sp  = 3.0;
+            const auto     rec = info_font.get_rect(this, {5.0, static_cast<double>(size[1] - dist)}, infostr.str().data());
+            gawl::draw_rect(this, {{rec.a.x - sp, rec.a.y - sp}, {rec.b.x + sp, rec.b.y + sp}}, {0, 0, 0, 0.5});
         }
-        info_font.draw(this, 5, size[1] - dist, {1, 1, 1, 0.7}, infostr.str().data());
+        info_font.draw(this, {5, 1. * size[1] - dist}, {1, 1, 1, 0.7}, infostr.str().data());
     }
 }
 auto Imgview::window_resize_callback() -> void {
