@@ -49,9 +49,9 @@ class Imgview : public gawl::WaylandWindow {
     std::string      root;
     IndexedPaths     image_files;
 
-    std::thread                         loader_thread;
-    gawl::ConditionalVariable           loader_event;
-    gawl::SafeVar<std::array<Image, 2>> images;
+    std::thread                          loader_thread;
+    gawl::Event                          loader_event;
+    gawl::Critical<std::array<Image, 2>> images;
 
     bool        shift       = false;
     bool        page_select = false;
