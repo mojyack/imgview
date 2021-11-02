@@ -411,8 +411,7 @@ auto Imgview::scroll_callback(gawl::WheelAxis /* axis */, double value) -> void 
     zoom_draw_pos(rate * std::pow(value, 3), pointer_pos);
     refresh();
 }
-Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::WaylandWindow(app, {.title = "Imgview"}) {
-    set_event_driven(true);
+Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::WaylandWindow({.app = app, .title = "Imgview", .manual_refresh = true}) {
     if(!std::filesystem::exists(path)) {
         quit_application();
         return;
