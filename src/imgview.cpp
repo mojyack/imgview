@@ -397,7 +397,8 @@ auto Imgview::refresh_callback() -> void {
         if(image_cache->contains(path)) {
             auto&      current = image_cache.data[path];
             const auto area    = calc_draw_area(current.graphic);
-            current.graphic.draw_rect(this, area);
+            displayed_graphic  = current.graphic;
+            displayed_graphic.draw_rect(this, area);
 
             if(pointer_pos.has_value()) {
                 const auto& pointer = pointer_pos.value();
@@ -589,8 +590,7 @@ auto Imgview::user_callback(void* /* data */) -> void {
         if(image_cache->contains(buf.first)) {
             new_image_cache[buf.first] = std::move(image_cache.data[buf.first]);
             if(buf.first == current) {
-                displayed_graphic = new_image_cache[current].graphic;
-                do_refresh        = true;
+                do_refresh = true;
             }
         }
     }
@@ -600,7 +600,6 @@ auto Imgview::user_callback(void* /* data */) -> void {
     // then, if current image is not loaded, load it
     if(!image_cache->contains(current) && buffer_cache->contains(current)) {
         new_image_cache[current] = {gawl::Graphic(buffer_cache.data[current]), read_captions((Path(current).replace_extension(".txt")).c_str())};
-        displayed_graphic        = new_image_cache[current].graphic;
         do_refresh               = true;
     }
 
