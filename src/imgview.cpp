@@ -171,6 +171,7 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
     case Actions::NONE:
         break;
     case Actions::QUIT_APP:
+        std::quick_exit(0); // hack
         quit_application();
         break;
     case Actions::NEXT_WORK:
