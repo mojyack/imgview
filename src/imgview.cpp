@@ -658,7 +658,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::Way
 
     loader_thread = std::thread([this]() {
         constexpr auto BUFFER_RANGE_LIMIT = 3;
-        while(is_running()) {
+        while(!finish_loader_thread_flag) {
             auto target = std::string();
             {
                 const auto lock = image_files.get_lock();
@@ -711,6 +711,7 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::Way
 }
 Imgview::~Imgview() {
     if(loader_thread.joinable()) {
+        finish_loader_thread_flag = true;
         loader_event.wakeup();
         loader_thread.join();
     }

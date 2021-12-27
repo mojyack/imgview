@@ -64,6 +64,7 @@ class Imgview : public gawl::WaylandWindow {
     gawl::Graphic                displayed_graphic;
     std::thread                  loader_thread;
     gawl::Event                  loader_event;
+    bool                         finish_loader_thread_flag = false;
 
     bool        shift       = false;
     bool        page_select = false;
