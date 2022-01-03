@@ -2,8 +2,6 @@
 #include <cmath>
 #include <iostream>
 
-#include <linux/input-event-codes.h>
-
 #include "imgview.hpp"
 #include "path.hpp"
 #include "sort.hpp"
@@ -78,8 +76,8 @@ auto read_captions(const char* const path) -> std::vector<Caption> {
     }
 
     auto default_size   = 18;
-    auto default_alignx = gawl::Align::left;
-    auto default_aligny = gawl::Align::center;
+    auto default_alignx = gawl::Align::Left;
+    auto default_aligny = gawl::Align::Center;
 
     while(getline(s, l)) {
         if(l.starts_with("#")) {
@@ -123,11 +121,11 @@ auto read_captions(const char* const path) -> std::vector<Caption> {
                 }
                 auto align = gawl::Align();
                 if(const auto spec = l.substr(8); spec == "center") {
-                    align = gawl::Align::center;
+                    align = gawl::Align::Center;
                 } else if(spec == "left") {
-                    align = gawl::Align::left;
+                    align = gawl::Align::Left;
                 } else if(spec == "right") {
-                    align = gawl::Align::right;
+                    align = gawl::Align::Right;
                 } else {
                     continue;
                 }
@@ -311,7 +309,7 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
             const auto& current = image_cache.data[path];
 
             reset_draw_pos();
-            const auto  size  = std::array{current.graphic.get_width(this), current.graphic.get_height(this)};
+            const auto  size  = std::array{current.graphic.get_width(*this), current.graphic.get_height(*this)};
             const auto& wsize = get_window_size();
             const auto  area  = gawl::calc_fit_rect({{0, 0}, {1. * wsize[0], 1. * wsize[1]}}, size[0], size[1]);
             draw_scale        = action == Actions::FIT_WIDTH ? (wsize[0] - area.width()) / size[0] : (wsize[1] - area.height()) / size[1];
@@ -326,7 +324,7 @@ auto Imgview::reset_draw_pos() -> void {
     draw_scale     = 0.0;
 }
 auto Imgview::calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Rectangle {
-    const auto size = std::array{graphic.get_width(this), graphic.get_height(this)};
+    const auto size = std::array{graphic.get_width(*this), graphic.get_height(*this)};
     const auto exp  = std::array{size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
     auto       area = gawl::calc_fit_rect({{0, 0}, {1. * get_window_size()[0], 1. * get_window_size()[1]}}, size[0], size[1]);
     area.a.x += draw_offset[0] - exp[0];
@@ -335,7 +333,7 @@ auto Imgview::calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Rectan
     area.b.y += draw_offset[1] + exp[1];
     return area;
 }
-auto Imgview::zoom_draw_pos(const double value, const std::array<double, 2>& origin) -> void {
+auto Imgview::zoom_draw_pos(const double value, const gawl::Point& origin) -> void {
     const auto if_lock = image_files.get_lock();
     const auto im_lock = image_cache.get_lock();
     const auto path    = image_files->get_current();
@@ -345,11 +343,11 @@ auto Imgview::zoom_draw_pos(const double value, const std::array<double, 2>& ori
     const auto& current = image_cache.data[path];
 
     const auto   area     = calc_draw_area(current.graphic);
-    const auto   delta    = std::array{current.graphic.get_width(this) * value, current.graphic.get_height(this) * value};
+    const auto   delta    = std::array{current.graphic.get_width(*this) * value, current.graphic.get_height(*this) * value};
     const double center_x = area.a.x + area.width() / 2;
     const double center_y = area.a.y + area.height() / 2;
-    draw_offset[0] += (center_x - origin[0]) / area.width() * delta[0];
-    draw_offset[1] += (center_y - origin[1]) / area.height() * delta[1];
+    draw_offset[0] += (center_x - origin.x) / area.width() * delta[0];
+    draw_offset[1] += (center_y - origin.y) / area.height() * delta[1];
     draw_scale += value;
 }
 auto Imgview::check_existence(const bool reverse) -> bool {
@@ -366,24 +364,24 @@ auto Imgview::check_existence(const bool reverse) -> bool {
     }
     return false;
 }
-auto Imgview::is_point_in_caption(double x, double y, const Image& image) const -> std::optional<CaptionDrawHint> {
+auto Imgview::is_point_in_caption(gawl::Point point, const Image& image) const -> std::optional<CaptionDrawHint> {
     if(!image.graphic || image.captions.empty()) {
         return std::nullopt;
     }
     const auto draw_area = calc_draw_area(image.graphic);
-    const auto w         = image.graphic.get_width(gawl::nullscreen);
-    const auto h         = image.graphic.get_height(gawl::nullscreen);
+    const auto w         = image.graphic.get_width(gawl::NullScreen());
+    const auto h         = image.graphic.get_height(gawl::NullScreen());
     const auto wr        = w / draw_area.width();
     const auto hr        = h / draw_area.height();
-    x                    = (x - draw_area.a.x) * wr;
-    y                    = (y - draw_area.a.y) * hr;
+    point.x              = (point.x - draw_area.a.x) * wr;
+    point.y              = (point.y - draw_area.a.y) * hr;
 
     for(const auto& c : image.captions) {
-        if(c.area[0] <= x && c.area[1] <= y && c.area[2] >= x && c.area[3] >= y) {
-            double x1 = c.area[0] / wr + draw_area.a.x;
-            double y1 = c.area[1] / hr + draw_area.a.y;
-            double x2 = c.area[2] / wr + draw_area.a.x;
-            double y2 = c.area[3] / hr + draw_area.a.y;
+        if(c.area[0] <= point.x && c.area[1] <= point.y && c.area[2] >= point.x && c.area[3] >= point.y) {
+            const auto x1 = c.area[0] / wr + draw_area.a.x;
+            const auto y1 = c.area[1] / hr + draw_area.a.y;
+            const auto x2 = c.area[2] / wr + draw_area.a.x;
+            const auto y2 = c.area[3] / hr + draw_area.a.y;
             return CaptionDrawHint{c, gawl::Rectangle{{x1, y1}, {x2, y2}}, wr};
         }
     }
@@ -399,27 +397,26 @@ auto Imgview::refresh_callback() -> void {
             auto&      current = image_cache.data[path];
             const auto area    = calc_draw_area(current.graphic);
             displayed_graphic  = current.graphic;
-            displayed_graphic.draw_rect(this, area);
+            displayed_graphic.draw_rect(*this, area);
 
             if(pointer_pos.has_value()) {
-                const auto& pointer = pointer_pos.value();
-                const auto  caption = is_point_in_caption(pointer[0], pointer[1], current);
+                const auto caption = is_point_in_caption(*pointer_pos, current);
                 if(caption.has_value()) {
                     const auto& c = caption.value().caption;
                     auto        a = caption.value().area;
                     const auto  e = caption.value().ext;
                     gawl::mask_alpha();
-                    gawl::draw_rect(this, a, {0, 0, 0, 0.6});
-                    caption_font.draw_wrapped(this, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), {.alignx = c.alignx, .aligny = c.aligny, .size = static_cast<int>(c.size / e)});
+                    gawl::draw_rect(*this, a, {0, 0, 0, 0.6});
+                    caption_font.draw_wrapped(*this, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
                     gawl::unmask_alpha();
                 }
             }
         } else {
             if(displayed_graphic) {
                 const auto area = calc_draw_area(displayed_graphic);
-                displayed_graphic.draw_rect(this, area);
+                displayed_graphic.draw_rect(*this, area);
             }
-            info_font.draw_fit_rect(this, {{0, 0}, {1. * get_window_size()[0], 1. * get_window_size()[1]}}, {1, 1, 1, 1}, "loading...");
+            info_font.draw_fit_rect(*this, {{0, 0}, {1. * get_window_size()[0], 1. * get_window_size()[1]}}, {1, 1, 1, 1}, "loading...");
         }
     }
     if(page_select) {
@@ -428,11 +425,11 @@ auto Imgview::refresh_callback() -> void {
 
         constexpr auto dist = 45;
         if(pagestr_width == -1) {
-            pagestr_width = page_select_font.get_rect(this, {0, 0}, pagestr).width();
+            pagestr_width = page_select_font.get_rect(*this, {0, 0}, pagestr).width();
         }
         const auto& size = get_window_size();
-        page_select_font.draw(this, {5, 1. * size[1] - dist}, {1, 1, 1, 1}, pagestr);
-        page_select_font.draw(this, {1. * 5 + pagestr_width, 1. * size[1] - dist}, {1, 1, 1, 1}, page_select_buffer.data());
+        page_select_font.draw(*this, {5, 1. * size[1] - dist}, {1, 1, 1, 1}, pagestr);
+        page_select_font.draw(*this, {1. * 5 + pagestr_width, 1. * size[1] - dist}, {1, 1, 1, 1}, page_select_buffer.data());
     }
     if(info_format != InfoFormats::NONE) {
         const auto current_path = Path(image_files->get_current());
@@ -453,10 +450,10 @@ auto Imgview::refresh_callback() -> void {
         const auto&    size = get_window_size();
         {
             constexpr auto sp  = 3.0;
-            const auto     rec = info_font.get_rect(this, {5.0, static_cast<double>(size[1] - dist)}, infostr.str().data());
-            gawl::draw_rect(this, {{rec.a.x - sp, rec.a.y - sp}, {rec.b.x + sp, rec.b.y + sp}}, {0, 0, 0, 0.5});
+            const auto     rec = info_font.get_rect(*this, {5.0, static_cast<double>(size[1] - dist)}, infostr.str().data());
+            gawl::draw_rect(*this, {{rec.a.x - sp, rec.a.y - sp}, {rec.b.x + sp, rec.b.y + sp}}, {0, 0, 0, 0.5});
         }
-        info_font.draw(this, {5, 1. * size[1] - dist}, {1, 1, 1, 0.7}, infostr.str().data());
+        info_font.draw(*this, {5, 1. * size[1] - dist}, {1, 1, 1, 0.7}, infostr.str().data());
     }
 }
 auto Imgview::window_resize_callback() -> void {
@@ -492,11 +489,11 @@ auto Imgview::keyboard_callback(const uint32_t key, const gawl::ButtonState stat
     };
     auto action = Actions::NONE;
     if(key == KEY_LEFTSHIFT || key == KEY_RIGHTSHIFT) {
-        shift = state == gawl::ButtonState::press;
+        shift = state == gawl::ButtonState::Press;
         return;
     }
     for(auto& a : keybinds) {
-        if((state == gawl::ButtonState::press && !a.on_press) || (state == gawl::ButtonState::release && a.on_press)) {
+        if((state == gawl::ButtonState::Press && !a.on_press) || (state == gawl::ButtonState::Release && a.on_press)) {
             continue;
         }
         for(auto k : a.keys) {
@@ -509,7 +506,7 @@ auto Imgview::keyboard_callback(const uint32_t key, const gawl::ButtonState stat
     }
     do_action(action, key);
 }
-auto Imgview::pointermove_callback(const double x, const double y) -> void {
+auto Imgview::pointermove_callback(const gawl::Point& point) -> void {
     auto do_refresh = false;
     {
 
@@ -521,7 +518,7 @@ auto Imgview::pointermove_callback(const double x, const double y) -> void {
         }
         const auto& current = image_cache.data[path];
 
-        const auto c = is_point_in_caption(x, y, current);
+        const auto c = is_point_in_caption(point, current);
         if(c.has_value()) {
             if(current_caption != &c->caption) {
                 current_caption = &c->caption;
@@ -536,16 +533,16 @@ auto Imgview::pointermove_callback(const double x, const double y) -> void {
     }
     if(pointer_pos.has_value()) {
         if(clicked[0]) {
-            draw_offset[0] += x - pointer_pos.value()[0];
-            draw_offset[1] += y - pointer_pos.value()[1];
+            draw_offset[0] += point.x - pointer_pos->x;
+            draw_offset[1] += point.y - pointer_pos->y;
             do_refresh = true;
         }
         if(clicked[1]) {
-            zoom_draw_pos((pointer_pos.value()[1] - y) * 0.001, clicked_pos[1]);
+            zoom_draw_pos((pointer_pos->y - point.y) * 0.001, clicked_pos[1]);
             do_refresh = true;
         }
     }
-    pointer_pos = std::array<double, 2>{x, y};
+    pointer_pos = point;
     moved       = true;
     if(do_refresh) {
         refresh();
@@ -555,18 +552,18 @@ auto Imgview::click_callback(const uint32_t button, const gawl::ButtonState stat
     if(button != BTN_LEFT && button != BTN_RIGHT) {
         return;
     }
-    clicked[button == BTN_RIGHT] = state == gawl::ButtonState::press;
+    clicked[button == BTN_RIGHT] = state == gawl::ButtonState::Press;
 
     if(pointer_pos.has_value()) {
-        clicked_pos[button == BTN_RIGHT][0] = pointer_pos.value()[0];
-        clicked_pos[button == BTN_RIGHT][1] = pointer_pos.value()[1];
+        clicked_pos[button == BTN_RIGHT].x = pointer_pos->x;
+        clicked_pos[button == BTN_RIGHT].y = pointer_pos->y;
     }
     if(clicked[button == BTN_RIGHT] == false && moved == false) {
         do_action(Actions::NEXT_PAGE);
     }
     moved = false;
 }
-auto Imgview::scroll_callback(gawl::WheelAxis /* axis */, double value) -> void {
+auto Imgview::scroll_callback(gawl::WheelAxis /* axis */, const double value) -> void {
     constexpr auto rate = 0.00001;
     if(!pointer_pos.has_value()) {
         return;
@@ -637,7 +634,7 @@ auto Imgview::user_callback(void* /* data */) -> void {
 
     image_cache.data = std::move(new_image_cache);
 }
-Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::WaylandWindow({.app = app, .title = "Imgview", .manual_refresh = true}) {
+Imgview::Imgview(Gawl::WindowCreateHint& hint, const char* const path) : Gawl::Window(hint) {
     if(!std::filesystem::exists(path)) {
         quit_application();
         return;
@@ -705,8 +702,8 @@ Imgview::Imgview(gawl::GawlApplication& app, const char* const path) : gawl::Way
         }
     });
 
-    page_select_font = gawl::TextRender({"/usr/share/fonts/cascadia-code/CascadiaCode.ttf"}, 16);
-    info_font        = gawl::TextRender({"/usr/share/fonts/noto-cjk/NotoSansCJK-Black.ttc"}, 16);
+    page_select_font = gawl::TextRender<16>({"/usr/share/fonts/cascadia-code/CascadiaCode.ttf"});
+    info_font        = gawl::TextRender<16>({"/usr/share/fonts/noto-cjk/NotoSansCJK-Black.ttc"});
     caption_font     = info_font;
 }
 Imgview::~Imgview() {
