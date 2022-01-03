@@ -56,9 +56,9 @@ class Imgview : public Gawl::Window {
         LONG,
     };
 
-    gawl::TextRender<16>         page_select_font;
-    gawl::TextRender<16>         info_font;
-    gawl::TextRender<16>         caption_font;
+    gawl::TextRender             page_select_font;
+    gawl::TextRender             info_font;
+    gawl::TextRender             caption_font;
     std::string                  root;
     gawl::Critical<IndexedPaths> image_files;
     gawl::Critical<BufferCache>  buffer_cache;

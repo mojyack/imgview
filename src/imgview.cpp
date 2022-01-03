@@ -702,8 +702,8 @@ Imgview::Imgview(Gawl::WindowCreateHint& hint, const char* const path) : Gawl::W
         }
     });
 
-    page_select_font = gawl::TextRender<16>({"/usr/share/fonts/cascadia-code/CascadiaCode.ttf"});
-    info_font        = gawl::TextRender<16>({"/usr/share/fonts/noto-cjk/NotoSansCJK-Black.ttc"});
+    page_select_font = gawl::TextRender({"/usr/share/fonts/cascadia-code/CascadiaCode.ttf"}, 16);
+    info_font        = gawl::TextRender({"/usr/share/fonts/noto-cjk/NotoSansCJK-Black.ttc"}, 16);
     caption_font     = info_font;
 }
 Imgview::~Imgview() {

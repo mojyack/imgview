@@ -1,5 +1,3 @@
-#include <gawl/declvar.hpp>
-
 #include "imgview.hpp"
 #include "path.hpp"
 

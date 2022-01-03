@@ -1,7 +1,7 @@
-project('imgview', 'cpp', version : '1.2.0', default_options : ['warning_level=3', 'werror=false', 'cpp_std=c++20'])
+project('imgview', 'cpp', version : '1.2.1', default_options : ['warning_level=3', 'werror=false', 'cpp_std=c++20'])
 
 subdir('src')
 
 executable('imgview', [imgview_files],
-            dependencies : [dependency('gawl', version : ['>=2.0', '<2.1'])],
+            dependencies : [dependency('gawl', version : ['>=2.1', '<2.2'])],
             install : true)
