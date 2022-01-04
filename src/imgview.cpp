@@ -487,13 +487,22 @@ auto Imgview::keyboard_callback(const uint32_t key, const gawl::ButtonState stat
         {Actions::FIT_WIDTH, {KEY_1}, false},
         {Actions::FIT_HEIGHT, {KEY_2}, false},
     };
-    auto action = Actions::NONE;
+    using enum gawl::ButtonState;
+    if(state == Enter) {
+        return;
+    }
+    if(state == Leave) {
+        shift = false;
+        return;
+    }
+    const auto press  = state == Press || state == Repeat;
+    auto       action = Actions::NONE;
     if(key == KEY_LEFTSHIFT || key == KEY_RIGHTSHIFT) {
-        shift = state == gawl::ButtonState::Press;
+        shift = press;
         return;
     }
     for(auto& a : keybinds) {
-        if((state == gawl::ButtonState::Press && !a.on_press) || (state == gawl::ButtonState::Release && a.on_press)) {
+        if(press != a.on_press) {
             continue;
         }
         for(auto k : a.keys) {
@@ -502,7 +511,9 @@ auto Imgview::keyboard_callback(const uint32_t key, const gawl::ButtonState stat
                 break;
             }
         }
-        if(action != Actions::NONE) break;
+        if(action != Actions::NONE) {
+            break;
+        }
     }
     do_action(action, key);
 }
