@@ -482,7 +482,7 @@ auto Imgview::keyboard_callback(const uint32_t key, const gawl::ButtonState stat
         {Actions::PAGE_SELECT_NUM_DEL, {KEY_BACKSPACE}, false, [this]() -> bool { return page_select; }},
         {Actions::PAGE_SELECT_APPLY, {KEY_ENTER}, false, [this]() -> bool { return page_select; }},
         {Actions::TOGGLE_SHOW_INFO, {KEY_F}, false},
-        {Actions::MOVE_DRAW_POS, {KEY_H, KEY_J, KEY_K, KEY_L}, false},
+        {Actions::MOVE_DRAW_POS, {KEY_H, KEY_J, KEY_K, KEY_L}, true},
         {Actions::RESET_DRAW_POS, {KEY_0}, false},
         {Actions::FIT_WIDTH, {KEY_1}, false},
         {Actions::FIT_HEIGHT, {KEY_2}, false},
@@ -634,7 +634,7 @@ auto Imgview::user_callback(void* /* data */) -> void {
 
     image_cache.data = std::move(new_image_cache);
 }
-Imgview::Imgview(Gawl::WindowCreateHint& hint, const char* const path) : Gawl::Window(hint) {
+Imgview::Imgview(Gawl::WindowCreateHint& hint, const char* const path) : Gawl::Window<Imgview>(hint) {
     if(!std::filesystem::exists(path)) {
         quit_application();
         return;

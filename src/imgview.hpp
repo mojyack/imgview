@@ -28,7 +28,7 @@ using ImageCache  = std::unordered_map<std::string, Image>;
 
 class Imgview;
 using Gawl = gawl::Gawl<Imgview>;
-class Imgview : public Gawl::Window {
+class Imgview : public Gawl::Window<Imgview> {
   private:
     enum class Actions {
         NONE,
