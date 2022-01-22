@@ -8,6 +8,7 @@
 #include <gawl/wayland/gawl.hpp>
 
 #include "indexed-paths.hpp"
+#include "util/thread.hpp"
 
 struct Caption {
     std::array<size_t, 4> area;
@@ -56,17 +57,17 @@ class Imgview : public Gawl::Window<Imgview> {
         LONG,
     };
 
-    gawl::TextRender             page_select_font;
-    gawl::TextRender             info_font;
-    gawl::TextRender             caption_font;
-    std::string                  root;
-    gawl::Critical<IndexedPaths> image_files;
-    gawl::Critical<BufferCache>  buffer_cache;
-    gawl::Critical<ImageCache>   image_cache;
-    gawl::Graphic                displayed_graphic;
-    std::thread                  loader_thread;
-    gawl::Event                  loader_event;
-    bool                         finish_loader_thread_flag = false;
+    gawl::TextRender       page_select_font;
+    gawl::TextRender       info_font;
+    gawl::TextRender       caption_font;
+    std::string            root;
+    Critical<IndexedPaths> image_files;
+    Critical<BufferCache>  buffer_cache;
+    Critical<ImageCache>   image_cache;
+    gawl::Graphic          displayed_graphic;
+    std::thread            loader_thread;
+    Event                  loader_event;
+    bool                   finish_loader_thread_flag = false;
 
     bool        shift       = false;
     bool        page_select = false;
