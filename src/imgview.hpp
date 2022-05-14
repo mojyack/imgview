@@ -27,39 +27,38 @@ struct Image {
 using BufferCache = std::unordered_map<std::string, gawl::PixelBuffer>;
 using ImageCache  = std::unordered_map<std::string, Image>;
 
-class Imgview;
-using Gawl = gawl::Gawl<Imgview>;
-class Imgview : public Gawl::Window<Imgview> {
+class Imgview {
   private:
+    using Window = gawl::wl::Window<Imgview, Imgview>;
+
     enum class Actions {
-        NONE,
-        QUIT_APP,
-        NEXT_WORK,
-        PREV_WORK,
-        NEXT_PAGE,
-        PREV_PAGE,
-        REFRESH_FILES,
-        PAGE_SELECT_ON,
-        PAGE_SELECT_OFF,
-        PAGE_SELECT_NUM,
-        PAGE_SELECT_NUM_DEL,
-        PAGE_SELECT_APPLY,
-        TOGGLE_SHOW_INFO,
-        MOVE_DRAW_POS,
-        RESET_DRAW_POS,
-        FIT_WIDTH,
-        FIT_HEIGHT,
+        None,
+        QuitApp,
+        NextWork,
+        PrevWork,
+        NextPage,
+        PrevPage,
+        RefreshFiles,
+        PageSelectOn,
+        PageSelectOff,
+        PageSelectNum,
+        PageSelectNumDel,
+        PageSelectApply,
+        ToggleShowInfo,
+        MoveDrawPos,
+        ResetDrawPos,
+        FitWidth,
+        FitHeight,
     };
 
     enum class InfoFormats {
-        NONE,
-        SHORT,
-        LONG,
+        None,
+        Short,
+        Long,
     };
 
-    gawl::TextRender       page_select_font;
-    gawl::TextRender       info_font;
-    gawl::TextRender       caption_font;
+    Window&                window;
+    gawl::TextRender       font;
     std::string            root;
     Critical<IndexedPaths> image_files;
     Critical<BufferCache>  buffer_cache;
@@ -69,10 +68,9 @@ class Imgview : public Gawl::Window<Imgview> {
     Event                  loader_event;
     bool                   finish_loader_thread_flag = false;
 
-    bool        shift       = false;
     bool        page_select = false;
     std::string page_select_buffer;
-    InfoFormats info_format    = InfoFormats::SHORT;
+    InfoFormats info_format    = InfoFormats::Short;
     double      draw_offset[2] = {0, 0};
     double      draw_scale     = 1.0;
     bool        clicked[2]     = {false};
@@ -83,7 +81,7 @@ class Imgview : public Gawl::Window<Imgview> {
 
     const Caption* current_caption = nullptr; // only used in is_point_in_caption()
 
-    auto do_action(Actions action, uint32_t key = KEY_RESERVED) -> void;
+    auto do_action(Actions action, xkb_keysym_t key = XKB_KEY_VoidSymbol) -> void;
     auto reset_draw_pos() -> void;
     auto calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Rectangle;
     auto zoom_draw_pos(double value, const gawl::Point& origin) -> void;
@@ -99,11 +97,13 @@ class Imgview : public Gawl::Window<Imgview> {
   public:
     auto refresh_callback() -> void;
     auto window_resize_callback() -> void;
-    auto keyboard_callback(uint32_t key, gawl::ButtonState state) -> void;
+    auto keysym_callback(xkb_keycode_t key, gawl::ButtonState state, xkb_state* xkb_state) -> void;
     auto pointermove_callback(const gawl::Point& point) -> void;
     auto click_callback(uint32_t button, gawl::ButtonState state) -> void;
     auto scroll_callback(gawl::WheelAxis axis, double value) -> void;
     auto user_callback(void* data) -> void;
-    Imgview(Gawl::WindowCreateHint& hint, const char* path);
+    Imgview(Window& window, const char* path);
     ~Imgview();
 };
+
+using Gawl = gawl::Gawl<Imgview>;

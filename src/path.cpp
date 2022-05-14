@@ -10,7 +10,7 @@ auto contains(const T& vec, const E& elm) -> bool {
     return std::find(vec.begin(), vec.end(), elm) != vec.end();
 }
 auto is_image_file(const char* const path) -> bool {
-    constexpr auto EXTENSIONS = std::array{".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"};
+    constexpr auto EXTENSIONS = std::array{".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif"};
     if(!std::filesystem::is_regular_file(path)) {
         return false;
     }

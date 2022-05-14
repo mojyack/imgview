@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 
+#include "fc.hpp"
 #include "imgview.hpp"
 #include "path.hpp"
 #include "sort.hpp"
@@ -166,20 +167,20 @@ auto read_captions(const char* const path) -> std::vector<Caption> {
 
 auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
     switch(action) {
-    case Actions::NONE:
+    case Actions::None:
         break;
-    case Actions::QUIT_APP:
+    case Actions::QuitApp:
         std::quick_exit(0); // hack
-        quit_application();
+        window.quit_application();
         break;
-    case Actions::NEXT_WORK:
-    case Actions::PREV_WORK: {
-        const auto reverse           = action == Actions::PREV_WORK;
+    case Actions::NextWork:
+    case Actions::PrevWork: {
+        const auto reverse           = action == Actions::PrevWork;
         auto       directory_changed = false;
         {
             const auto lock = image_files.get_lock();
             if(check_existence(reverse)) {
-                const auto next_directory = get_next_directory(image_files->get_base().data(), action == Actions::PREV_WORK, root.data());
+                const auto next_directory = get_next_directory(image_files->get_base().data(), action == Actions::PrevWork, root.data());
                 if(next_directory) {
                     image_files.data  = get_sorted_images(next_directory->data());
                     directory_changed = true;
@@ -188,12 +189,12 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
         }
         if(directory_changed) {
             loader_event.wakeup();
-            refresh();
+            window.refresh();
         }
     } break;
-    case Actions::NEXT_PAGE:
-    case Actions::PREV_PAGE: {
-        const auto reverse    = action == Actions::PREV_PAGE;
+    case Actions::NextPage:
+    case Actions::PrevPage: {
+        const auto reverse    = action == Actions::PrevPage;
         auto       do_refresh = false;
         {
             auto       do_update = true;
@@ -223,36 +224,36 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
         }
         if(do_refresh) {
             loader_event.wakeup();
-            refresh();
+            window.refresh();
         }
     } break;
-    case Actions::REFRESH_FILES: {
+    case Actions::RefreshFiles: {
         const auto lock = image_files.get_lock();
         if(check_existence(false)) {
             const auto lock  = image_files.get_lock();
             image_files.data = get_sorted_images(Path(image_files->get_current()).parent_path().string().data());
         }
     } break;
-    case Actions::PAGE_SELECT_ON:
+    case Actions::PageSelectOn:
         page_select = true;
         page_select_buffer.clear();
-        refresh();
+        window.refresh();
         break;
-    case Actions::PAGE_SELECT_OFF:
+    case Actions::PageSelectOff:
         page_select = false;
-        refresh();
+        window.refresh();
         break;
-    case Actions::PAGE_SELECT_NUM:
+    case Actions::PageSelectNum:
         page_select_buffer += (key == KEY_0 ? '0' : static_cast<char>('1' + key - KEY_1));
-        refresh();
+        window.refresh();
         break;
-    case Actions::PAGE_SELECT_NUM_DEL:
+    case Actions::PageSelectNumDel:
         if(!page_select_buffer.empty()) {
             page_select_buffer.pop_back();
         }
-        refresh();
+        window.refresh();
         break;
-    case Actions::PAGE_SELECT_APPLY: {
+    case Actions::PageSelectApply: {
         page_select     = false;
         auto do_loading = false;
         {
@@ -269,36 +270,36 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
         if(do_loading) {
             loader_event.wakeup();
         }
-        refresh();
+        window.refresh();
     } break;
-    case Actions::TOGGLE_SHOW_INFO:
+    case Actions::ToggleShowInfo:
         switch(info_format) {
-        case InfoFormats::NONE:
-            info_format = InfoFormats::SHORT;
+        case InfoFormats::None:
+            info_format = InfoFormats::Short;
             break;
-        case InfoFormats::SHORT:
-            info_format = InfoFormats::LONG;
+        case InfoFormats::Short:
+            info_format = InfoFormats::Long;
             break;
-        case InfoFormats::LONG:
-            info_format = InfoFormats::NONE;
+        case InfoFormats::Long:
+            info_format = InfoFormats::None;
             break;
         }
-        refresh();
+        window.refresh();
         break;
-    case Actions::MOVE_DRAW_POS: {
-        constexpr double SPEED = 60;
-        draw_offset[0] += key == KEY_L ? SPEED : key == KEY_H ? -SPEED
-                                                              : 0;
-        draw_offset[1] += key == KEY_J ? SPEED : key == KEY_K ? -SPEED
-                                                              : 0;
-        refresh();
+    case Actions::MoveDrawPos: {
+        constexpr auto speed = 60.0;
+        draw_offset[0] += key == KEY_L ? speed : key == KEY_H ? -speed
+                                                                      : 0;
+        draw_offset[1] += key == KEY_J ? speed : key == KEY_K ? -speed
+                                                                      : 0;
+        window.refresh();
     } break;
-    case Actions::RESET_DRAW_POS:
+    case Actions::ResetDrawPos:
         reset_draw_pos();
-        refresh();
+        window.refresh();
         break;
-    case Actions::FIT_WIDTH:
-    case Actions::FIT_HEIGHT: {
+    case Actions::FitWidth:
+    case Actions::FitHeight: {
         {
             const auto if_lock = image_files.get_lock();
             const auto im_lock = image_cache.get_lock();
@@ -309,12 +310,12 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
             const auto& current = image_cache.data[path];
 
             reset_draw_pos();
-            const auto  size  = std::array{current.graphic.get_width(*this), current.graphic.get_height(*this)};
-            const auto& wsize = get_window_size();
+            const auto  size  = std::array{current.graphic.get_width(window), current.graphic.get_height(window)};
+            const auto& wsize = window.get_window_size();
             const auto  area  = gawl::calc_fit_rect({{0, 0}, {1. * wsize[0], 1. * wsize[1]}}, size[0], size[1]);
-            draw_scale        = action == Actions::FIT_WIDTH ? (wsize[0] - area.width()) / size[0] : (wsize[1] - area.height()) / size[1];
+            draw_scale        = action == Actions::FitWidth ? (wsize[0] - area.width()) / size[0] : (wsize[1] - area.height()) / size[1];
         }
-        refresh();
+        window.refresh();
     } break;
     }
 }
@@ -324,9 +325,9 @@ auto Imgview::reset_draw_pos() -> void {
     draw_scale     = 0.0;
 }
 auto Imgview::calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Rectangle {
-    const auto size = std::array{graphic.get_width(*this), graphic.get_height(*this)};
+    const auto size = std::array{graphic.get_width(window), graphic.get_height(window)};
     const auto exp  = std::array{size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
-    auto       area = gawl::calc_fit_rect({{0, 0}, {1. * get_window_size()[0], 1. * get_window_size()[1]}}, size[0], size[1]);
+    auto       area = gawl::calc_fit_rect({{0, 0}, {1. * window.get_window_size()[0], 1. * window.get_window_size()[1]}}, size[0], size[1]);
     area.a.x += draw_offset[0] - exp[0];
     area.a.y += draw_offset[1] - exp[1];
     area.b.x += draw_offset[0] + exp[0];
@@ -343,7 +344,7 @@ auto Imgview::zoom_draw_pos(const double value, const gawl::Point& origin) -> vo
     const auto& current = image_cache.data[path];
 
     const auto   area     = calc_draw_area(current.graphic);
-    const auto   delta    = std::array{current.graphic.get_width(*this) * value, current.graphic.get_height(*this) * value};
+    const auto   delta    = std::array{current.graphic.get_width(window) * value, current.graphic.get_height(window) * value};
     const double center_x = area.a.x + area.width() / 2;
     const double center_y = area.a.y + area.height() / 2;
     draw_offset[0] += (center_x - origin.x) / area.width() * delta[0];
@@ -356,10 +357,10 @@ auto Imgview::check_existence(const bool reverse) -> bool {
         return true;
     case PathCheckResult::RETRIEVED:
         loader_event.wakeup();
-        refresh();
+        window.refresh();
         break;
     case PathCheckResult::FATAL:
-        quit_application();
+        window.quit_application();
         break;
     }
     return false;
@@ -397,7 +398,7 @@ auto Imgview::refresh_callback() -> void {
             auto&      current = image_cache.data[path];
             const auto area    = calc_draw_area(current.graphic);
             displayed_graphic  = current.graphic;
-            displayed_graphic.draw_rect(*this, area);
+            displayed_graphic.draw_rect(window, area);
 
             if(pointer_pos.has_value()) {
                 const auto caption = is_point_in_caption(*pointer_pos, current);
@@ -406,17 +407,17 @@ auto Imgview::refresh_callback() -> void {
                     auto        a = caption.value().area;
                     const auto  e = caption.value().ext;
                     gawl::mask_alpha();
-                    gawl::draw_rect(*this, a, {0, 0, 0, 0.6});
-                    caption_font.draw_wrapped(*this, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
+                    gawl::draw_rect(window, a, {0, 0, 0, 0.6});
+                    font.draw_wrapped(window, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
                     gawl::unmask_alpha();
                 }
             }
         } else {
             if(displayed_graphic) {
                 const auto area = calc_draw_area(displayed_graphic);
-                displayed_graphic.draw_rect(*this, area);
+                displayed_graphic.draw_rect(window, area);
             }
-            info_font.draw_fit_rect(*this, {{0, 0}, {1. * get_window_size()[0], 1. * get_window_size()[1]}}, {1, 1, 1, 1}, "loading...");
+            font.draw_fit_rect(window, {{0, 0}, {1. * window.get_window_size()[0], 1. * window.get_window_size()[1]}}, {1, 1, 1, 1}, "loading...");
         }
     }
     if(page_select) {
@@ -425,20 +426,20 @@ auto Imgview::refresh_callback() -> void {
 
         constexpr auto dist = 45;
         if(pagestr_width == -1) {
-            pagestr_width = page_select_font.get_rect(*this, {0, 0}, pagestr).width();
+            pagestr_width = font.get_rect(window, {0, 0}, pagestr).width();
         }
-        const auto& size = get_window_size();
-        page_select_font.draw(*this, {5, 1. * size[1] - dist}, {1, 1, 1, 1}, pagestr);
-        page_select_font.draw(*this, {1. * 5 + pagestr_width, 1. * size[1] - dist}, {1, 1, 1, 1}, page_select_buffer.data());
+        const auto& size = window.get_window_size();
+        font.draw(window, {5, 1. * size[1] - dist}, {1, 1, 1, 1}, pagestr);
+        font.draw(window, {1. * 5 + pagestr_width, 1. * size[1] - dist}, {1, 1, 1, 1}, page_select_buffer.data());
     }
-    if(info_format != InfoFormats::NONE) {
+    if(info_format != InfoFormats::None) {
         const auto current_path = Path(image_files->get_current());
         auto       work_name    = std::string();
         switch(info_format) {
-        case InfoFormats::SHORT:
+        case InfoFormats::Short:
             work_name = current_path.parent_path().filename().string() + "/" + current_path.filename().string();
             break;
-        case InfoFormats::LONG:
+        case InfoFormats::Long:
             work_name = std::filesystem::relative(current_path, root).string();
             break;
         default:
@@ -447,75 +448,60 @@ auto Imgview::refresh_callback() -> void {
         auto infostr = std::ostringstream();
         infostr << "[" << image_files->get_index() + 1 << "/" << image_files->size() << "] " << work_name;
         constexpr auto dist = 7;
-        const auto&    size = get_window_size();
+        const auto&    size = window.get_window_size();
         {
             constexpr auto sp  = 3.0;
-            const auto     rec = info_font.get_rect(*this, {5.0, static_cast<double>(size[1] - dist)}, infostr.str().data());
-            gawl::draw_rect(*this, {{rec.a.x - sp, rec.a.y - sp}, {rec.b.x + sp, rec.b.y + sp}}, {0, 0, 0, 0.5});
+            const auto     rec = font.get_rect(window, {5.0, static_cast<double>(size[1] - dist)}, infostr.str().data());
+            gawl::draw_rect(window, {{rec.a.x - sp, rec.a.y - sp}, {rec.b.x + sp, rec.b.y + sp}}, {0, 0, 0, 0.5});
         }
-        info_font.draw(*this, {5, 1. * size[1] - dist}, {1, 1, 1, 0.7}, infostr.str().data());
+        font.draw(window, {5, 1. * size[1] - dist}, {1, 1, 1, 0.7}, infostr.str().data());
     }
 }
 auto Imgview::window_resize_callback() -> void {
     reset_draw_pos();
 }
-auto Imgview::keyboard_callback(const uint32_t key, const gawl::ButtonState state) -> void {
+auto Imgview::keysym_callback(const xkb_keycode_t key, const gawl::ButtonState state, xkb_state* const /*xkb_state*/) -> void {
     const static auto num_keys = std::vector<uint32_t>{KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9};
     struct KeyBind {
         Actions                   action;
         std::vector<uint32_t>     keys;
-        bool                      on_press;
         std::function<bool(void)> condition = nullptr;
     };
     const static KeyBind keybinds[] = {
-        {Actions::QUIT_APP, {KEY_Q, KEY_BACKSLASH}, true},
-        {Actions::NEXT_WORK, {KEY_X, KEY_RIGHT}, true, [this]() -> bool { return shift; }},
-        {Actions::NEXT_WORK, {KEY_DOWN}, true},
-        {Actions::PREV_WORK, {KEY_Z, KEY_LEFT}, true, [this]() -> bool { return shift; }},
-        {Actions::PREV_WORK, {KEY_UP}, true},
-        {Actions::NEXT_PAGE, {KEY_X, KEY_RIGHT, KEY_SPACE}, true},
-        {Actions::PREV_PAGE, {KEY_Z, KEY_PAGEDOWN}, true},
-        {Actions::REFRESH_FILES, {KEY_R}, false},
-        {Actions::PAGE_SELECT_ON, {KEY_P}, false, [this]() -> bool { return !page_select; }},
-        {Actions::PAGE_SELECT_OFF, {KEY_ESC, KEY_P}, false, [this]() -> bool { return page_select; }},
-        {Actions::PAGE_SELECT_NUM, num_keys, true, [this]() -> bool { return page_select; }},
-        {Actions::PAGE_SELECT_NUM_DEL, {KEY_BACKSPACE}, false, [this]() -> bool { return page_select; }},
-        {Actions::PAGE_SELECT_APPLY, {KEY_ENTER}, false, [this]() -> bool { return page_select; }},
-        {Actions::TOGGLE_SHOW_INFO, {KEY_F}, false},
-        {Actions::MOVE_DRAW_POS, {KEY_H, KEY_J, KEY_K, KEY_L}, true},
-        {Actions::RESET_DRAW_POS, {KEY_0}, false},
-        {Actions::FIT_WIDTH, {KEY_1}, false},
-        {Actions::FIT_HEIGHT, {KEY_2}, false},
+        {Actions::QuitApp, {KEY_Q, KEY_BACKSLASH}},
+        {Actions::NextWork, {KEY_DOWN}},
+        {Actions::PrevWork, {KEY_UP}},
+        {Actions::NextPage, {KEY_X, KEY_RIGHT, KEY_SPACE}},
+        {Actions::PrevPage, {KEY_Z, KEY_PAGEDOWN}},
+        {Actions::RefreshFiles, {KEY_R}},
+        {Actions::PageSelectOn, {KEY_P}, [this]() -> bool { return !page_select; }},
+        {Actions::PageSelectOff, {KEY_ESC, KEY_P}, [this]() -> bool { return page_select; }},
+        {Actions::PageSelectNum, num_keys, [this]() -> bool { return page_select; }},
+        {Actions::PageSelectNumDel, {KEY_BACKSPACE}, [this]() -> bool { return page_select; }},
+        {Actions::PageSelectApply, {KEY_ENTER}, [this]() -> bool { return page_select; }},
+        {Actions::ToggleShowInfo, {KEY_F}},
+        {Actions::MoveDrawPos, {KEY_H, KEY_J, KEY_K, KEY_L}},
+        {Actions::ResetDrawPos, {KEY_0}},
+        {Actions::FitWidth, {KEY_1}},
+        {Actions::FitHeight, {KEY_2}},
     };
     using enum gawl::ButtonState;
-    if(state == Enter) {
+    if(state == Enter || state == Leave || state == Release) {
         return;
     }
-    if(state == Leave) {
-        shift = false;
-        return;
-    }
-    const auto press  = state == Press || state == Repeat;
-    auto       action = Actions::NONE;
-    if(key == KEY_LEFTSHIFT || key == KEY_RIGHTSHIFT) {
-        shift = press;
-        return;
-    }
-    for(auto& a : keybinds) {
-        if(press != a.on_press) {
-            continue;
-        }
-        for(auto k : a.keys) {
-            if(k == key && (!a.condition || a.condition())) {
+    auto action = Actions::None;
+    for(const auto& a : keybinds) {
+        for(const auto k : a.keys) {
+            if(k == key - 8 && (!a.condition || a.condition())) {
                 action = a.action;
                 break;
             }
         }
-        if(action != Actions::NONE) {
+        if(action != Actions::None) {
             break;
         }
     }
-    do_action(action, key);
+    do_action(action, key - 8);
 }
 auto Imgview::pointermove_callback(const gawl::Point& point) -> void {
     auto do_refresh = false;
@@ -556,7 +542,7 @@ auto Imgview::pointermove_callback(const gawl::Point& point) -> void {
     pointer_pos = point;
     moved       = true;
     if(do_refresh) {
-        refresh();
+        window.refresh();
     }
 }
 auto Imgview::click_callback(const uint32_t button, const gawl::ButtonState state) -> void {
@@ -570,7 +556,7 @@ auto Imgview::click_callback(const uint32_t button, const gawl::ButtonState stat
         clicked_pos[button == BTN_RIGHT].y = pointer_pos->y;
     }
     if(clicked[button == BTN_RIGHT] == false && moved == false) {
-        do_action(Actions::NEXT_PAGE);
+        do_action(Actions::NextPage);
     }
     moved = false;
 }
@@ -580,7 +566,7 @@ auto Imgview::scroll_callback(gawl::WheelAxis /* axis */, const double value) ->
         return;
     }
     zoom_draw_pos(rate * std::pow(value, 3), pointer_pos.value());
-    refresh();
+    window.refresh();
 }
 auto Imgview::user_callback(void* /* data */) -> void {
     auto current = std::string();
@@ -624,7 +610,7 @@ auto Imgview::user_callback(void* /* data */) -> void {
     }
 
     if(do_refresh) {
-        refresh();
+        window.refresh();
     }
 
     // if there is buffer_cache to load, call self later
@@ -640,14 +626,14 @@ auto Imgview::user_callback(void* /* data */) -> void {
         break;
     }
     if(not_loaded_image_left) {
-        invoke_user_callback();
+        window.invoke_user_callback();
     }
 
     image_cache.data = std::move(new_image_cache);
 }
-Imgview::Imgview(Gawl::WindowCreateHint& hint, const char* const path) : Gawl::Window<Imgview>(hint) {
+Imgview::Imgview(Window& window, const char* const path) : window(window) {
     if(!std::filesystem::exists(path)) {
-        quit_application();
+        window.quit_application();
         return;
     }
     const auto arg   = std::filesystem::absolute(path);
@@ -657,14 +643,14 @@ Imgview::Imgview(Gawl::WindowCreateHint& hint, const char* const path) : Gawl::W
         const auto filename = arg.filename().string();
         if(!files.set_index_by_name(filename.data())) {
             std::cerr << "no such file." << std::endl;
-            quit_application();
+            window.quit_application();
             return;
         }
     }
     image_files.data = std::move(files);
     root             = dir.parent_path().string();
 
-    loader_thread = std::thread([this]() {
+    loader_thread = std::thread([this, &window]() {
         constexpr auto BUFFER_RANGE_LIMIT = 3;
         while(!finish_loader_thread_flag) {
             auto target = std::string();
@@ -706,16 +692,18 @@ Imgview::Imgview(Gawl::WindowCreateHint& hint, const char* const path) : Gawl::W
                     }
                 }
                 buffer_cache.data = std::move(new_buffer_cache);
-                invoke_user_callback();
+                window.invoke_user_callback();
             } else {
                 loader_event.wait();
             }
         }
     });
 
-    page_select_font = gawl::TextRender({"/usr/share/fonts/cascadia-code/CascadiaCode.ttf"}, 16);
-    info_font        = gawl::TextRender({"/usr/share/fonts/noto-cjk/NotoSansCJK-Black.ttc"}, 16);
-    caption_font     = info_font;
+    const auto font_path = fc::find_fontpath_from_name("Noto Sans CJK JP:style=Bold");
+    if(font_path.empty()) {
+        throw std::runtime_error("failed to find font");
+    }
+    font = gawl::TextRender({font_path.data()}, 16);
 }
 Imgview::~Imgview() {
     if(loader_thread.joinable()) {
