@@ -6,6 +6,7 @@
 #include "imgview.hpp"
 #include "path.hpp"
 #include "sort.hpp"
+#include "util/error.hpp"
 
 namespace {
 enum class PathCheckResult {
@@ -289,9 +290,9 @@ auto Imgview::do_action(const Actions action, const uint32_t key) -> void {
     case Actions::MoveDrawPos: {
         constexpr auto speed = 60.0;
         draw_offset[0] += key == KEY_L ? speed : key == KEY_H ? -speed
-                                                                      : 0;
+                                                              : 0;
         draw_offset[1] += key == KEY_J ? speed : key == KEY_K ? -speed
-                                                                      : 0;
+                                                              : 0;
         window.refresh();
     } break;
     case Actions::ResetDrawPos:
@@ -390,7 +391,8 @@ auto Imgview::is_point_in_caption(gawl::Point point, const Image& image) const -
 }
 auto Imgview::refresh_callback() -> void {
     gawl::clear_screen({0, 0, 0, 0});
-    const auto if_lock = image_files.get_lock();
+    const auto [width, height] = window.get_window_size();
+    const auto if_lock         = image_files.get_lock();
     {
         const auto im_lock = image_cache.get_lock();
         const auto path    = image_files->get_current();
@@ -417,21 +419,10 @@ auto Imgview::refresh_callback() -> void {
                 const auto area = calc_draw_area(displayed_graphic);
                 displayed_graphic.draw_rect(window, area);
             }
-            font.draw_fit_rect(window, {{0, 0}, {1. * window.get_window_size()[0], 1. * window.get_window_size()[1]}}, {1, 1, 1, 1}, "loading...");
+            font.draw_fit_rect(window, {{0, 0}, {1. * width, 1. * height}}, {1, 1, 1, 1}, "loading...");
         }
     }
-    if(page_select) {
-        constexpr auto pagestr       = "Page: ";
-        static auto    pagestr_width = int(-1);
-
-        constexpr auto dist = 45;
-        if(pagestr_width == -1) {
-            pagestr_width = font.get_rect(window, {0, 0}, pagestr).width();
-        }
-        const auto& size = window.get_window_size();
-        font.draw(window, {5, 1. * size[1] - dist}, {1, 1, 1, 1}, pagestr);
-        font.draw(window, {1. * 5 + pagestr_width, 1. * size[1] - dist}, {1, 1, 1, 1}, page_select_buffer.data());
-    }
+    auto top = 0.0;
     if(info_format != InfoFormats::None) {
         const auto current_path = Path(image_files->get_current());
         auto       work_name    = std::string();
@@ -445,16 +436,19 @@ auto Imgview::refresh_callback() -> void {
         default:
             break;
         }
-        auto infostr = std::ostringstream();
-        infostr << "[" << image_files->get_index() + 1 << "/" << image_files->size() << "] " << work_name;
-        constexpr auto dist = 7;
-        const auto&    size = window.get_window_size();
-        {
-            constexpr auto sp  = 3.0;
-            const auto     rec = font.get_rect(window, {5.0, static_cast<double>(size[1] - dist)}, infostr.str().data());
-            gawl::draw_rect(window, {{rec.a.x - sp, rec.a.y - sp}, {rec.b.x + sp, rec.b.y + sp}}, {0, 0, 0, 0.5});
-        }
-        font.draw(window, {5, 1. * size[1] - dist}, {1, 1, 1, 0.7}, infostr.str().data());
+        const auto str  = build_string("[", image_files->get_index() + 1, "/", image_files->size(), "]", work_name);
+        const auto rect = gawl::Rectangle(font.get_rect(window, str.data())).expand(2, 2);
+        const auto box  = gawl::Rectangle{{0, height - rect.height() - top}, {rect.width(), height - top}};
+        gawl::draw_rect(window, box, {0, 0, 0, 0.5});
+        font.draw_fit_rect(window, box, {1, 1, 1, 0.7}, str.data());
+        top += rect.height();
+    }
+    if(page_select) {
+        const auto str  = std::string("Page: ") + page_select_buffer;
+        const auto rect = font.get_rect(window, str.data());
+        const auto box  = gawl::Rectangle{{0, height - rect.height() - top}, {rect.width(), height - top}};
+        font.draw_fit_rect(window, box, {1, 1, 1, 0.7}, str.data());
+        top += rect.height();
     }
 }
 auto Imgview::window_resize_callback() -> void {
