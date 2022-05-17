@@ -1,4 +1,4 @@
-project('imgview', 'cpp', version : '1.2.6', default_options : ['warning_level=3', 'werror=false', 'cpp_std=c++20'])
+project('imgview', 'cpp', version : '1.2.7', default_options : ['warning_level=3', 'werror=false', 'cpp_std=c++20'])
 
 subdir('src')
 
