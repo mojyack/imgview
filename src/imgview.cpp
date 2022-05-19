@@ -562,69 +562,6 @@ auto Imgview::scroll_callback(gawl::WheelAxis /* axis */, const double value) ->
     zoom_draw_pos(rate * std::pow(value, 3), pointer_pos.value());
     window.refresh();
 }
-auto Imgview::user_callback(void* /* data */) -> void {
-    auto current = std::string();
-    {
-        const auto lock = image_files.get_lock();
-        current         = image_files->get_current();
-    }
-
-    auto       new_image_cache = ImageCache();
-    const auto bf_lock         = buffer_cache.get_lock();
-    const auto im_lock         = image_cache.get_lock();
-
-    bool do_refresh = false;
-    // first, reuse loaded image cache
-    for(const auto& buf : buffer_cache.data) {
-        if(image_cache->contains(buf.first)) {
-            new_image_cache[buf.first] = std::move(image_cache.data[buf.first]);
-            if(buf.first == current) {
-                do_refresh = true;
-            }
-        }
-    }
-
-    auto itr = buffer_cache->begin(); // used later to reduce loop count
-
-    // then, if current image is not loaded, load it
-    if(!image_cache->contains(current) && buffer_cache->contains(current)) {
-        new_image_cache[current] = {gawl::Graphic(buffer_cache.data[current]), read_captions((Path(current).replace_extension(".txt")).c_str())};
-        do_refresh               = true;
-    }
-
-    // finally, if no image is loaded in this invocation, load single preload image
-    else {
-        for(; itr != buffer_cache->end(); itr++) {
-            if(image_cache->contains(itr->first)) {
-                continue;
-            }
-            new_image_cache[itr->first] = {gawl::Graphic(itr->second), read_captions((Path(itr->first).replace_extension(".txt")).c_str())};
-            break;
-        }
-    }
-
-    if(do_refresh) {
-        window.refresh();
-    }
-
-    // if there is buffer_cache to load, call self later
-    auto not_loaded_image_left = false;
-    if(itr != buffer_cache->end()) {
-        itr++;
-    }
-    for(; itr != buffer_cache->end(); itr++) {
-        if(image_cache->contains(itr->first)) {
-            continue;
-        }
-        not_loaded_image_left = true;
-        break;
-    }
-    if(not_loaded_image_left) {
-        window.invoke_user_callback();
-    }
-
-    image_cache.data = std::move(new_image_cache);
-}
 Imgview::Imgview(Window& window, const char* const path) : window(window) {
     if(!std::filesystem::exists(path)) {
         window.quit_application();
@@ -646,47 +583,50 @@ Imgview::Imgview(Window& window, const char* const path) : window(window) {
 
     loader_thread = std::thread([this, &window]() {
         constexpr auto BUFFER_RANGE_LIMIT = 3;
+
+        auto context = window.fork_context();
         while(!finish_loader_thread_flag) {
             auto target = std::string();
             {
-                const auto lock = image_files.get_lock();
+                const auto if_lock = image_files.get_lock();
+                const auto ic_lock = image_cache.get_lock();
                 for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
                     const auto index = static_cast<int>(image_files.data.get_index()) + i;
                     if(index < 0 || index >= static_cast<int>(image_files->size())) {
                         continue;
                     }
-                    const auto name = image_files.data[index];
 
-                    // read buffer_cache without locking
-                    // since there is no thread modifying buffer_cache except loader_thread
-                    if(buffer_cache->contains(name)) {
-                        continue;
+                    auto name = image_files.data[index];
+                    if(!image_cache->contains(name)) {
+                        target = std::move(name);
+                        break;
                     }
-                    target = std::move(name);
-                    break;
                 }
             }
             if(!target.empty()) {
-                auto buffer = gawl::PixelBuffer(target.data());
+                auto graphic = gawl::Graphic(target.data());
+                context.wait();
 
-                auto       new_buffer_cache = BufferCache();
-                const auto if_lock          = image_files.get_lock();
-                const auto bf_lock          = buffer_cache.get_lock();
+                const auto if_lock = image_files.get_lock();
+                const auto ic_lock = image_cache.get_lock();
 
-                buffer_cache.data[target] = std::move(buffer);
+                auto new_image_cache = ImageCache();
+
                 for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
                     const auto index = static_cast<int>(image_files->get_index()) + i;
                     if(index < 0 || index >= static_cast<int>(image_files->size())) {
                         continue;
                     }
-                    const auto name = image_files.data[index];
 
-                    if(buffer_cache->contains(name)) {
-                        new_buffer_cache[name] = std::move(buffer_cache.data[name]);
+                    const auto name = image_files.data[index];
+                    if(auto p = image_cache->find(name); p != image_cache->end()) {
+                        new_image_cache[name] = std::move(p->second);
+                    } else if(name == target) {
+                        new_image_cache[name] = Image{graphic, read_captions((Path(name).replace_extension(".txt")).c_str())};
                     }
                 }
-                buffer_cache.data = std::move(new_buffer_cache);
-                window.invoke_user_callback();
+                *image_cache = std::move(new_image_cache);
+                window.refresh();
             } else {
                 loader_event.wait();
             }

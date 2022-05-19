@@ -61,7 +61,6 @@ class Imgview {
     gawl::TextRender       font;
     std::string            root;
     Critical<IndexedPaths> image_files;
-    Critical<BufferCache>  buffer_cache;
     Critical<ImageCache>   image_cache;
     gawl::Graphic          displayed_graphic;
     std::thread            loader_thread;
@@ -101,7 +100,6 @@ class Imgview {
     auto pointermove_callback(const gawl::Point& point) -> void;
     auto click_callback(uint32_t button, gawl::ButtonState state) -> void;
     auto scroll_callback(gawl::WheelAxis axis, double value) -> void;
-    auto user_callback(void* data) -> void;
     Imgview(Window& window, const char* path);
     ~Imgview();
 };
