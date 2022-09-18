@@ -70,8 +70,8 @@ class Imgview {
     Gawl::Window<Imgview>& window;
     gawl::TextRender       font;
     std::string            root;
-    Critical<IndexedPaths> files;
-    Critical<Cache>        cache;
+    Critical<IndexedPaths> critical_files;
+    Critical<Cache>        critical_cache;
     gawl::Graphic          displayed_graphic;
     std::thread            loader;
     Event                  loader_event;
@@ -206,11 +206,11 @@ class Imgview {
             const auto reverse           = action == Actions::PrevWork;
             auto       directory_changed = false;
             {
-                const auto lock = files.get_lock();
-                if(check_existence(reverse)) {
-                    const auto next_directory = get_next_directory(files->get_base().data(), action == Actions::PrevWork, root.data());
+                auto [lock, files] = critical_files.access();
+                if(check_existence(reverse, files)) {
+                    const auto next_directory = get_next_directory(files.get_base().data(), action == Actions::PrevWork, root.data());
                     if(next_directory) {
-                        (*files)          = get_sorted_images(next_directory->data());
+                        files             = get_sorted_images(next_directory->data());
                         directory_changed = true;
                     }
                 }
@@ -225,26 +225,26 @@ class Imgview {
             const auto reverse    = action == Actions::PrevPage;
             auto       do_refresh = false;
             {
-                auto       do_update = true;
-                const auto lock      = files.get_lock();
+                auto do_update     = true;
+                auto [lock, files] = critical_files.access();
                 do {
-                    const auto current_index = files->get_index();
-                    if((!reverse && current_index + 1 >= files->size()) || (reverse && current_index <= 0)) {
+                    const auto current_index = files.get_index();
+                    if((!reverse && current_index + 1 >= files.size()) || (reverse && current_index <= 0)) {
                         break;
                     }
                     const auto next_index = current_index + (!reverse ? 1 : -1);
-                    const auto next_path  = files.data[next_index];
+                    const auto next_path  = files[next_index];
                     if(!std::filesystem::exists(next_path)) {
                         break;
                     }
-                    files->set_index(next_index);
+                    files.set_index(next_index);
                     do_update  = false;
                     do_refresh = true;
                 } while(0);
                 if(do_update) {
-                    if(check_existence(reverse)) {
-                        if(auto updated = get_next_image_file(files->get_current().data(), reverse)) {
-                            (*files)   = std::move(updated.value());
+                    if(check_existence(reverse, files)) {
+                        if(auto updated = get_next_image_file(files.get_current().data(), reverse)) {
+                            files      = std::move(updated.value());
                             do_refresh = true;
                         }
                     }
@@ -256,9 +256,9 @@ class Imgview {
             }
         } break;
         case Actions::RefreshFiles: {
-            const auto lock = files.get_lock();
-            if(check_existence(false)) {
-                (*files) = get_sorted_images(Path(files->get_current()).parent_path().string().data());
+            auto [lock, files] = critical_files.access();
+            if(check_existence(false, files)) {
+                files = get_sorted_images(Path(files.get_current()).parent_path().string().data());
             }
         } break;
         case Actions::PageSelectOn:
@@ -284,12 +284,12 @@ class Imgview {
             page_select     = false;
             auto do_loading = false;
             {
-                const auto lock = files.get_lock();
-                if(check_existence(false)) {
-                    const auto new_files = get_sorted_images(files->get_base().data());
+                auto [lock, files] = critical_files.access();
+                if(check_existence(false, files)) {
+                    const auto new_files = get_sorted_images(files.get_base().data());
                     if(const auto p = std::atoi(page_select_buffer.data()) - 1; p >= 0 && static_cast<long unsigned int>(p) < new_files.size()) {
-                        (*files) = std::move(new_files);
-                        files->set_index(p);
+                        files = std::move(new_files);
+                        files.set_index(p);
                         do_loading = true;
                     }
                 }
@@ -328,13 +328,14 @@ class Imgview {
         case Actions::FitWidth:
         case Actions::FitHeight: {
             {
-                const auto if_lock = files.get_lock();
-                const auto im_lock = cache.get_lock();
-                const auto path    = files->get_current();
-                if(!cache->contains(path)) {
+                auto [lock0, files] = critical_files.access();
+                auto [lock1, cache] = critical_cache.access();
+                const auto path     = files.get_current();
+                const auto p        = cache.find(path);
+                if(p == cache.end()) {
                     break;
                 }
-                const auto& current = cache.data[path];
+                const auto& current = p->second;
 
                 reset_draw_pos();
                 const auto  size  = std::array{current.graphic.get_width(window), current.graphic.get_height(window)};
@@ -362,13 +363,14 @@ class Imgview {
         return area;
     }
     auto zoom_draw_pos(const double value, const gawl::Point& origin) -> void {
-        const auto if_lock = files.get_lock();
-        const auto im_lock = cache.get_lock();
-        const auto path    = files->get_current();
-        if(!cache->contains(path)) {
+        auto [lock0, files] = critical_files.access();
+        auto [lock1, cache] = critical_cache.access();
+        const auto path     = files.get_current();
+        const auto p        = cache.find(path);
+        if(p == cache.end()) {
             return;
         }
-        const auto& current = cache.data[path];
+        const auto& current = p->second;
 
         const auto   area     = calc_draw_area(current.graphic);
         const auto   delta    = std::array{current.graphic.get_width(window) * value, current.graphic.get_height(window) * value};
@@ -378,9 +380,9 @@ class Imgview {
         draw_offset[1] += (center_y - origin.y) / area.height() * delta[1];
         draw_scale += value;
     }
-    // lock image_files before call this
-    auto check_existence(const bool reverse) -> bool {
-        switch(check_and_retrieve_paths(root.data(), files.data, reverse)) {
+
+    auto check_existence(const bool reverse, IndexedPaths& files) -> bool {
+        switch(check_and_retrieve_paths(root.data(), files, reverse)) {
         case PathCheckResult::Exists:
             return true;
         case PathCheckResult::Retrieved:
@@ -421,15 +423,15 @@ class Imgview {
     auto refresh_callback() -> void {
         gawl::clear_screen({0, 0, 0, 0});
         const auto [width, height] = window.get_window_size();
-        const auto if_lock         = files.get_lock();
-        if(files->empty()) {
+        const auto [lock, files]   = critical_files.access();
+        if(files.empty()) {
             return;
         }
-        const auto path = files->get_current();
+        const auto path = files.get_current();
         {
-            const auto im_lock = cache.get_lock();
-            if(cache->contains(path)) {
-                auto&      current = cache.data[path];
+            const auto [lock, cache] = critical_cache.access();
+            if(const auto p = cache.find(path); p != cache.end()) {
+                auto&      current = p->second;
                 const auto area    = calc_draw_area(current.graphic);
                 displayed_graphic  = current.graphic;
                 displayed_graphic.draw_rect(window, area);
@@ -468,7 +470,7 @@ class Imgview {
             default:
                 break;
             }
-            const auto str  = build_string("[", files->get_index() + 1, "/", files->size(), "]", work_name);
+            const auto str  = build_string("[", files.get_index() + 1, "/", files.size(), "]", work_name);
             const auto rect = gawl::Rectangle(font.get_rect(window, str.data())).expand(2, 2);
             const auto box  = gawl::Rectangle{{0, height - rect.height() - top}, {rect.width(), height - top}};
             gawl::draw_rect(window, box, {0, 0, 0, 0.5});
@@ -533,13 +535,14 @@ class Imgview {
         auto do_refresh = false;
         {
 
-            const auto if_lock = files.get_lock();
-            const auto im_lock = cache.get_lock();
-            const auto path    = files->get_current();
-            if(!cache->contains(path)) {
+            auto [lock0, files] = critical_files.access();
+            auto [lock1, cache] = critical_cache.access();
+            const auto path     = files.get_current();
+            const auto p        = cache.find(path);
+            if(p == cache.end()) {
                 return;
             }
-            const auto& current = cache.data[path];
+            const auto& current = p->second;
 
             const auto c = is_point_in_caption(point, current);
             if(c.has_value()) {
@@ -612,8 +615,8 @@ class Imgview {
                 return;
             }
         }
-        (*files) = std::move(new_files);
-        root     = dir.parent_path().string();
+        critical_files.unsafe_access() = std::move(new_files);
+        root                           = dir.parent_path().string();
 
         loader = std::thread([this, &window]() {
             constexpr auto BUFFER_RANGE_LIMIT = 3;
@@ -622,16 +625,16 @@ class Imgview {
             while(!loader_exit) {
                 auto target = std::string();
                 {
-                    const auto if_lock = files.get_lock();
-                    const auto ic_lock = cache.get_lock();
+                    auto [lock0, files] = critical_files.access();
+                    auto [lock1, cache] = critical_cache.access();
                     for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
-                        const auto index = static_cast<int>(files.data.get_index()) + i;
-                        if(index < 0 || index >= static_cast<int>(files->size())) {
+                        const auto index = static_cast<int>(files.get_index()) + i;
+                        if(index < 0 || index >= static_cast<int>(files.size())) {
                             continue;
                         }
 
-                        auto name = files.data[index];
-                        if(!cache->contains(name)) {
+                        auto name = files[index];
+                        if(!cache.contains(name)) {
                             target = std::move(name);
                             break;
                         }
@@ -641,25 +644,25 @@ class Imgview {
                     auto graphic = gawl::Graphic(target.data());
                     context.wait();
 
-                    const auto if_lock = files.get_lock();
-                    const auto ic_lock = cache.get_lock();
+                    auto [lock0, files] = critical_files.access();
+                    auto [lock1, cache] = critical_cache.access();
 
                     auto new_cache = Cache();
 
                     for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
-                        const auto index = static_cast<int>(files->get_index()) + i;
-                        if(index < 0 || index >= static_cast<int>(files->size())) {
+                        const auto index = static_cast<int>(files.get_index()) + i;
+                        if(index < 0 || index >= static_cast<int>(files.size())) {
                             continue;
                         }
 
-                        const auto name = files.data[index];
-                        if(auto p = cache->find(name); p != cache->end()) {
+                        const auto name = files[index];
+                        if(auto p = cache.find(name); p != cache.end()) {
                             new_cache[name] = std::move(p->second);
                         } else if(name == target) {
                             new_cache[name] = Image{graphic, read_captions((Path(name).replace_extension(".txt")).c_str())};
                         }
                     }
-                    *cache = std::move(new_cache);
+                    cache = std::move(new_cache);
                     window.refresh();
                 } else {
                     loader_event.wait();
