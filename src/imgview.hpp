@@ -336,6 +336,9 @@ class Imgview {
                     break;
                 }
                 const auto& current = p->second;
+                if(!current.graphic) {
+                    break;
+                }
 
                 reset_draw_pos();
                 const auto  size  = std::array{current.graphic.get_width(window), current.graphic.get_height(window)};
@@ -371,6 +374,9 @@ class Imgview {
             return;
         }
         const auto& current = p->second;
+        if(!current.graphic) {
+            return;
+        }
 
         const auto   area     = calc_draw_area(current.graphic);
         const auto   delta    = std::array{current.graphic.get_width(window) * value, current.graphic.get_height(window) * value};
@@ -431,21 +437,25 @@ class Imgview {
         {
             const auto [lock, cache] = critical_cache.access();
             if(const auto p = cache.find(path); p != cache.end()) {
-                auto&      current = p->second;
-                const auto area    = calc_draw_area(current.graphic);
-                displayed_graphic  = current.graphic;
-                displayed_graphic.draw_rect(window, area);
+                auto& current = p->second;
+                if(!current.graphic) {
+                    font.draw_fit_rect(window, {{0, 0}, {1. * width, 1. * height}}, {1, 1, 1, 1}, "broken image");
+                } else {
+                    const auto area   = calc_draw_area(current.graphic);
+                    displayed_graphic = current.graphic;
+                    displayed_graphic.draw_rect(window, area);
 
-                if(pointer_pos.has_value()) {
-                    const auto caption = is_point_in_caption(*pointer_pos, current);
-                    if(caption.has_value()) {
-                        const auto& c = caption.value().caption;
-                        auto        a = caption.value().area;
-                        const auto  e = caption.value().ext;
-                        gawl::mask_alpha();
-                        gawl::draw_rect(window, a, {0, 0, 0, 0.6});
-                        font.draw_wrapped(window, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
-                        gawl::unmask_alpha();
+                    if(pointer_pos.has_value()) {
+                        const auto caption = is_point_in_caption(*pointer_pos, current);
+                        if(caption.has_value()) {
+                            const auto& c = caption.value().caption;
+                            auto        a = caption.value().area;
+                            const auto  e = caption.value().ext;
+                            gawl::mask_alpha();
+                            gawl::draw_rect(window, a, {0, 0, 0, 0.6});
+                            font.draw_wrapped(window, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
+                            gawl::unmask_alpha();
+                        }
                     }
                 }
             } else {
