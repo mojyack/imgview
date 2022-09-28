@@ -607,6 +607,11 @@ class Imgview {
         const auto arg       = std::filesystem::absolute(path);
         const auto dir       = std::filesystem::is_directory(arg) ? arg : arg.parent_path();
         auto       new_files = get_sorted_images(dir.string().data());
+        if(new_files.empty()) {
+            std::cerr << "empty directory." << std::endl;
+            window.quit_application();
+            return;
+        }
         if(is_regular_file(arg)) {
             const auto filename = arg.filename().string();
             if(!new_files.set_index_by_name(filename.data())) {
