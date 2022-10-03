@@ -18,6 +18,7 @@ template <class T, class E>
 auto contains(const T& vec, const E& elm) -> bool {
     return std::find(vec.begin(), vec.end(), elm) != vec.end();
 }
+
 inline auto is_image_file(const char* const path) -> bool {
     constexpr auto extensions = std::array{".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif"};
     if(!std::filesystem::is_regular_file(path)) {
@@ -26,6 +27,7 @@ inline auto is_image_file(const char* const path) -> bool {
     const auto extension = Path(path).extension().string();
     return contains(extensions, extension);
 }
+
 inline auto list_files(const char* const path) -> IndexedPaths {
     auto files = IndexedPaths(path);
     for(const std::filesystem::directory_entry& it : std::filesystem::directory_iterator(path)) {
@@ -34,6 +36,7 @@ inline auto list_files(const char* const path) -> IndexedPaths {
     files.sort();
     return files;
 }
+
 inline auto get_next_file(const IndexedPaths& files, const char* const current, const bool reverse) -> std::optional<IndexedPaths> {
     if(auto p = std::find(files.begin(), files.end(), Path(current).filename().string()); p == files.end() || p == (reverse ? files.begin() : files.end() - 1)) {
         return std::nullopt;
@@ -43,6 +46,7 @@ inline auto get_next_file(const IndexedPaths& files, const char* const current, 
         return new_files;
     }
 }
+
 inline auto get_next_directory_recursive(const char* const path, const bool reverse, const bool skip_current, const char* const root) -> std::optional<std::string> {
     if(std::strcmp(path, "/") == 0) {
         return std::nullopt;
@@ -98,6 +102,7 @@ inline auto find_viewable_directory(const char* const path, const bool skip_curr
     }
     return std::nullopt;
 }
+
 inline auto get_sorted_images(const char* const path) -> IndexedPaths {
     auto files = list_files(path);
     files.filter([](const std::string& path) {
@@ -105,6 +110,7 @@ inline auto get_sorted_images(const char* const path) -> IndexedPaths {
     });
     return files;
 }
+
 inline auto get_sorted_directories(const char* const path) -> IndexedPaths {
     auto files = list_files(path);
     files.filter([](const std::string& path) {
@@ -112,10 +118,12 @@ inline auto get_sorted_directories(const char* const path) -> IndexedPaths {
     });
     return files;
 }
+
 inline auto get_next_image_file(const char* const path, const bool reverse) -> std::optional<IndexedPaths> {
     const auto images = get_sorted_images(Path(path).parent_path().string().data());
     return get_next_file(images, path, reverse);
 }
+
 inline auto get_next_directory(const char* const path, const bool reverse, const char* const root) -> std::optional<std::string> {
     return get_next_directory_recursive(path, reverse, false, root);
 }

@@ -350,11 +350,13 @@ class Imgview {
         } break;
         }
     }
+
     auto reset_draw_pos() -> void {
         draw_offset[0] = 0;
         draw_offset[1] = 0;
         draw_scale     = 0.0;
     }
+
     auto calc_draw_area(const gawl::Graphic& graphic) const -> gawl::Rectangle {
         const auto size = std::array{graphic.get_width(window), graphic.get_height(window)};
         const auto exp  = std::array{size[0] * draw_scale / 2.0, size[1] * draw_scale / 2.0};
@@ -365,6 +367,7 @@ class Imgview {
         area.b.y += draw_offset[1] + exp[1];
         return area;
     }
+
     auto zoom_draw_pos(const double value, const gawl::Point& origin) -> void {
         auto [lock0, files] = critical_files.access();
         auto [lock1, cache] = critical_cache.access();
@@ -401,6 +404,7 @@ class Imgview {
         }
         return false;
     }
+
     auto is_point_in_caption(gawl::Point point, const Image& image) const -> std::optional<CaptionDrawHint> {
         if(!image.graphic || image.captions.empty()) {
             return std::nullopt;
@@ -495,9 +499,11 @@ class Imgview {
             top += rect.height();
         }
     }
+
     auto window_resize_callback() -> void {
         reset_draw_pos();
     }
+
     auto keysym_callback(const xkb_keycode_t key, const gawl::ButtonState state, xkb_state* const /*xkb_state*/) -> void {
         const static auto num_keys = std::vector<uint32_t>{KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9};
         struct KeyBind {
@@ -541,6 +547,7 @@ class Imgview {
         }
         do_action(action, key - 8);
     }
+
     auto pointermove_callback(const gawl::Point& point) -> void {
         auto do_refresh = false;
         {
@@ -584,6 +591,7 @@ class Imgview {
             window.refresh();
         }
     }
+
     auto click_callback(const uint32_t button, const gawl::ButtonState state) -> void {
         if(button != BTN_LEFT && button != BTN_RIGHT) {
             return;
@@ -599,6 +607,7 @@ class Imgview {
         }
         moved = false;
     }
+
     auto scroll_callback(gawl::WheelAxis /* axis */, const double value) -> void {
         constexpr auto rate = 0.00001;
         if(!pointer_pos.has_value()) {
@@ -691,6 +700,7 @@ class Imgview {
         }
         font = gawl::TextRender({font_path.data()}, 16);
     }
+
     ~Imgview() {
         if(loader.joinable()) {
             loader_exit = true;
