@@ -18,7 +18,7 @@ class IndexedPaths {
 
   public:
     auto sort() -> void {
-        sort_string(files);
+        sort_strings(files);
     }
 
     auto filter(const std::function<bool(const std::string&)> pred) -> void {

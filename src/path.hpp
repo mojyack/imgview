@@ -153,7 +153,7 @@ inline auto check_and_retrieve_paths(const char* const root, IndexedPaths& files
             const auto missing_name = missing.filename().string();
             auto       file_names   = updated.get_file_names();
             file_names.emplace_back(missing_name);
-            sort_string(file_names);
+            sort_strings(file_names);
             auto       index            = static_cast<size_t>(std::distance(file_names.begin(), std::find(file_names.begin(), file_names.end(), missing_name)));
             const auto selectable_front = (index != (file_names.size() - 1));
             const auto selectable_back  = (index != 0);

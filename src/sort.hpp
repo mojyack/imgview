@@ -1,10 +1,10 @@
 #pragma once
 #include <string>
-#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-inline auto sort_string(std::vector<std::string>& strings) -> void {
-    auto swap_flag = std::unordered_map<size_t, bool>();
+inline auto sort_strings(std::vector<std::string>& strings) -> void {
+    auto swap_flag = std::unordered_set<size_t>();
     auto max_len   = size_t(0);
     for(auto& s : strings) {
         if(auto len = s.size(); len > max_len) {
@@ -17,17 +17,17 @@ inline auto sort_string(std::vector<std::string>& strings) -> void {
         auto sort_count = size_t(0);
         for(auto j = size_t(0); j < strings.size(); j += 1) {
             if(strings[j].size() >= k) {
-                swap_flag[j] = true;
+                swap_flag.emplace(j);
                 sort_count += 1;
             }
         }
         auto sep = strings.size() - sort_count;
         for(auto j = size_t(0), swapped = size_t(0); j < strings.size(); j += 1) {
-            if(swap_flag[j] && j < sep) {
-                if(!swap_flag[sep + swapped]) {
+            if(swap_flag.contains(j) && j < sep) {
+                if(!swap_flag.contains(sep + swapped)) {
                     std::iter_swap(strings.begin() + j, strings.begin() + sep + swapped);
                 } else {
-                    while(swap_flag[sep + swapped]) {
+                    while(swap_flag.contains(sep + swapped)) {
                         swapped += 1;
                         if(sep + swapped >= strings.size()) {
                             break;
@@ -36,8 +36,8 @@ inline auto sort_string(std::vector<std::string>& strings) -> void {
                         }
                     }
                 }
-                swap_flag[j]             = false;
-                swap_flag[sep + swapped] = false;
+                swap_flag.erase(j);
+                swap_flag.erase(sep + swapped);
                 swapped += 1;
             }
         }
@@ -46,7 +46,7 @@ inline auto sort_string(std::vector<std::string>& strings) -> void {
         auto char_and_index = std::vector<std::pair<char, size_t>>(sort_count);
 
         for(auto j = size_t(0); j < sort_count; j += 1) {
-            copy_buffer[j] = strings[sep + j];
+            copy_buffer[j] = std::move(strings[sep + j]);
             if(auto c = copy_buffer[j][k - 1]; c >= 65 && c <= 90) {
                 char_and_index[j].first = c + 32;
             } else {
@@ -56,7 +56,7 @@ inline auto sort_string(std::vector<std::string>& strings) -> void {
         }
         std::stable_sort(char_and_index.begin(), char_and_index.end());
         for(auto j = size_t(0); j < sort_count; j += 1) {
-            strings[sep + j] = copy_buffer[char_and_index[j].second];
+            strings[sep + j] = std::move(copy_buffer[char_and_index[j].second]);
         }
     }
 }
