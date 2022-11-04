@@ -93,7 +93,7 @@ inline auto find_viewable_directory(const char* const path, const bool skip_curr
     }
     for(const auto& p : files) {
         const auto full_path = files.get_full_path(p.data());
-        if(!std::filesystem::is_directory(full_path.data())) {
+        if(!std::filesystem::is_directory(full_path.data()) || p[0] == '.') {
             continue;
         }
         if(auto r = find_viewable_directory(full_path.data()); r.has_value()) {
