@@ -3,5 +3,5 @@ project('imgview', 'cpp', version : '1.2.10', default_options : ['warning_level=
 subdir('src')
 
 executable('imgview', [imgview_files],
-            dependencies : [dependency('gawl', version : ['>=2.3.12', '<2.4']), dependency('gawl-keysym'), dependency('fontconfig')],
+            dependencies : [dependency('gawl', version : ['>=2.3.12', '<2.4']), dependency('gawl-keysym'), dependency('fontconfig'), dependency('Magick++')],
             install : true)

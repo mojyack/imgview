@@ -20,7 +20,7 @@ auto contains(const T& vec, const E& elm) -> bool {
 }
 
 inline auto is_image_file(const char* const path) -> bool {
-    constexpr auto extensions = std::array{".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif"};
+    constexpr auto extensions = std::array{".jpg", ".jpeg", ".png", ".jxl", ".layer", ".gif", ".webp", ".bmp", ".avif"};
     if(!std::filesystem::is_regular_file(path)) {
         return false;
     }

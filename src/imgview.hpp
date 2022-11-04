@@ -7,9 +7,11 @@
 
 #include <gawl/wayland/gawl.hpp>
 
+#include "caption.hpp"
 #include "fc.hpp"
 #include "indexed-paths.hpp"
 #include "path.hpp"
+#include "type.hpp"
 #include "util/error.hpp"
 #include "util/thread.hpp"
 
@@ -19,53 +21,7 @@ using Gawl = gawl::Gawl<Imgview>;
 
 class Imgview {
   private:
-    enum class Actions {
-        None,
-        QuitApp,
-        NextWork,
-        PrevWork,
-        NextPage,
-        PrevPage,
-        RefreshFiles,
-        PageSelectOn,
-        PageSelectOff,
-        PageSelectNum,
-        PageSelectNumDel,
-        PageSelectApply,
-        ToggleShowInfo,
-        MoveDrawPos,
-        ResetDrawPos,
-        FitWidth,
-        FitHeight,
-    };
-
-    enum class InfoFormats {
-        None,
-        Short,
-        Long,
-    };
-
-    struct Caption {
-        std::array<size_t, 4> area;
-        std::string           text;
-
-        int         size;
-        gawl::Align alignx;
-        gawl::Align aligny;
-    };
-
-    struct Image {
-        gawl::Graphic        graphic;
-        std::vector<Caption> captions;
-    };
-
     using Cache = std::unordered_map<std::string, Image>;
-
-    struct CaptionDrawHint {
-        const Caption&  caption;
-        gawl::Rectangle area;
-        double          ext;
-    };
 
     Gawl::Window<Imgview>& window;
     gawl::TextRender       font;
@@ -76,6 +32,8 @@ class Imgview {
     std::thread            loader;
     Event                  loader_event;
     bool                   loader_exit = false;
+
+    graphic::layer::LayerGraphicFactory layer_graphic_factory;
 
     bool        page_select = false;
     std::string page_select_buffer;
@@ -89,109 +47,6 @@ class Imgview {
     std::optional<gawl::Point> pointer_pos;
 
     const Caption* current_caption = nullptr; // only used in is_point_in_caption()
-
-    static auto read_captions(const char* const path) -> std::vector<Caption> {
-        auto r = std::vector<Caption>();
-        auto s = std::ifstream(path);
-
-        if(s.fail()) {
-            return r;
-        }
-
-        auto l = std::string();
-
-        // read version
-        if(!getline(s, l) || l != "caption 0") {
-            return r;
-        }
-
-        auto default_size   = 18;
-        auto default_alignx = gawl::Align::Left;
-        auto default_aligny = gawl::Align::Center;
-
-        while(getline(s, l)) {
-            if(l.starts_with("#")) {
-                l += ",";
-                const auto size = l.size();
-                auto       pos  = std::string::size_type(1);
-                auto       prev = std::string::size_type(1);
-                auto       arr  = std::vector<size_t>();
-                for(; pos < size && (pos = l.find(",", pos)) != l.npos; prev = (pos += 1)) {
-                    try {
-                        arr.emplace_back(std::stoull(l.substr(prev, pos - prev)));
-                    } catch(const std::invalid_argument&) {
-                        return r;
-                    }
-                }
-                if(arr.size() != 4) {
-                    return r;
-                }
-                r.emplace_back(Caption{.size = default_size, .alignx = default_alignx, .aligny = default_aligny});
-                std::copy_n(arr.begin(), 4, r.back().area.begin());
-            } else if(l.starts_with("$")) {
-                if(l.starts_with("$size")) {
-                    const auto s = l.find(' ');
-                    if(s == l.npos) {
-                        continue;
-                    }
-                    auto size = 0;
-                    try {
-                        size = std::stoull(l.substr(s + 1));
-                    } catch(const std::invalid_argument&) {
-                        continue;
-                    }
-                    if(r.empty()) {
-                        default_size = size;
-                    } else {
-                        r.back().size = size;
-                    }
-                } else if(l.starts_with("$align")) {
-                    if(l.size() < 7) {
-                        continue;
-                    }
-                    auto align = gawl::Align();
-                    if(const auto spec = l.substr(8); spec == "center") {
-                        align = gawl::Align::Center;
-                    } else if(spec == "left") {
-                        align = gawl::Align::Left;
-                    } else if(spec == "right") {
-                        align = gawl::Align::Right;
-                    } else {
-                        continue;
-                    }
-                    if(l[6] == 'x') {
-                        if(r.empty()) {
-                            default_alignx = align;
-                        } else {
-                            r.back().alignx = align;
-                        }
-                    } else if(l[6] == 'y') {
-                        if(r.empty()) {
-                            default_aligny = align;
-                        } else {
-                            r.back().aligny = align;
-                        }
-                    } else {
-                        continue;
-                    }
-                }
-            } else if(l.starts_with("\\")) {
-                continue;
-            } else if(l.starts_with("<!>")) {
-                break;
-            } else {
-                if(r.empty()) {
-                    return r;
-                }
-                auto& caption = r.back();
-                caption.text += l + "\\n";
-            }
-        }
-        for(auto& c : r) {
-            c.text = c.text.substr(0, c.text.size() - 2);
-        }
-        return r;
-    }
 
     auto do_action(const Actions action, const xkb_keysym_t key = XKB_KEY_VoidSymbol) -> void {
         switch(action) {
@@ -335,13 +190,13 @@ class Imgview {
                 if(p == cache.end()) {
                     break;
                 }
-                const auto& current = p->second;
-                if(!current.graphic) {
+                auto graphic = p->second.graphic.visit([](auto& g) { return g.get_graphic(); });
+                if(!graphic) {
                     break;
                 }
 
                 reset_draw_pos();
-                const auto  size  = std::array{current.graphic.get_width(window), current.graphic.get_height(window)};
+                const auto  size  = std::array{graphic.get_width(window), graphic.get_height(window)};
                 const auto& wsize = window.get_window_size();
                 const auto  area  = gawl::calc_fit_rect({{0, 0}, {1. * wsize[0], 1. * wsize[1]}}, size[0], size[1]);
                 draw_scale        = action == Actions::FitWidth ? (wsize[0] - area.width()) / size[0] : (wsize[1] - area.height()) / size[1];
@@ -376,13 +231,13 @@ class Imgview {
         if(p == cache.end()) {
             return;
         }
-        const auto& current = p->second;
-        if(!current.graphic) {
+        auto graphic = p->second.graphic.visit([](auto& g) { return g.get_graphic(); });
+        if(!graphic) {
             return;
         }
 
-        const auto   area     = calc_draw_area(current.graphic);
-        const auto   delta    = std::array{current.graphic.get_width(window) * value, current.graphic.get_height(window) * value};
+        const auto   area     = calc_draw_area(graphic);
+        const auto   delta    = std::array{graphic.get_width(window) * value, graphic.get_height(window) * value};
         const double center_x = area.a.x + area.width() / 2;
         const double center_y = area.a.y + area.height() / 2;
         draw_offset[0] += (center_x - origin.x) / area.width() * delta[0];
@@ -405,13 +260,14 @@ class Imgview {
         return false;
     }
 
-    auto is_point_in_caption(gawl::Point point, const Image& image) const -> std::optional<CaptionDrawHint> {
-        if(!image.graphic || image.captions.empty()) {
+    auto is_point_in_caption(gawl::Point point, Image& image) const -> std::optional<CaptionDrawHint> {
+        auto graphic = image.graphic.visit([](auto& g) { return g.get_graphic(); });
+        if(!graphic || image.captions.empty()) {
             return std::nullopt;
         }
-        const auto draw_area = calc_draw_area(image.graphic);
-        const auto w         = image.graphic.get_width(gawl::NullScreen());
-        const auto h         = image.graphic.get_height(gawl::NullScreen());
+        const auto draw_area = calc_draw_area(graphic);
+        const auto w         = graphic.get_width(gawl::NullScreen());
+        const auto h         = graphic.get_height(gawl::NullScreen());
         const auto wr        = w / draw_area.width();
         const auto hr        = h / draw_area.height();
         point.x              = (point.x - draw_area.a.x) * wr;
@@ -441,16 +297,20 @@ class Imgview {
         {
             const auto [lock, cache] = critical_cache.access();
             if(const auto p = cache.find(path); p != cache.end()) {
-                auto& current = p->second;
-                if(!current.graphic) {
-                    font.draw_fit_rect(window, {{0, 0}, {1. * width, 1. * height}}, {1, 1, 1, 1}, "broken image");
+                auto graphic = p->second.graphic.visit([](auto& g) { return g.get_graphic(); });
+                if(!graphic) {
+                    auto message = "broken image";
+                    if(const auto m = std::get_if<graphic::message::MessageGraphic>(&p->second.graphic.as_variant()); m != nullptr) {
+                        message = m->get_message().data();
+                    }
+                    font.draw_fit_rect(window, {{0, 0}, {1. * width, 1. * height}}, {1, 1, 1, 1}, message);
                 } else {
-                    const auto area   = calc_draw_area(current.graphic);
-                    displayed_graphic = current.graphic;
+                    const auto area   = calc_draw_area(graphic);
+                    displayed_graphic = graphic;
                     displayed_graphic.draw_rect(window, area);
 
                     if(pointer_pos.has_value()) {
-                        const auto caption = is_point_in_caption(*pointer_pos, current);
+                        const auto caption = is_point_in_caption(*pointer_pos, p->second);
                         if(caption.has_value()) {
                             const auto& c = caption.value().caption;
                             auto        a = caption.value().area;
@@ -559,9 +419,8 @@ class Imgview {
             if(p == cache.end()) {
                 return;
             }
-            const auto& current = p->second;
 
-            const auto c = is_point_in_caption(point, current);
+            const auto c = is_point_in_caption(point, p->second);
             if(c.has_value()) {
                 if(current_caption != &c->caption) {
                     current_caption = &c->caption;
@@ -665,7 +524,17 @@ class Imgview {
                     }
                 }
                 if(!target.empty()) {
-                    auto graphic = gawl::Graphic(target.data());
+                    auto graphic = Graphic(graphic::message::MessageGraphic("not loaded"));
+                    if(std::filesystem::path(target).extension() == ".layer") {
+                        auto r = layer_graphic_factory.create_graphic(target);
+                        if(r) {
+                            graphic = std::move(r.as_value());
+                        } else {
+                            graphic = graphic::message::MessageGraphic(r.as_error().cstr());
+                        }
+                    } else {
+                        graphic = graphic::single::SingleGraphic(target.data());
+                    }
                     context.wait();
 
                     auto [lock0, files] = critical_files.access();
@@ -683,7 +552,7 @@ class Imgview {
                         if(auto p = cache.find(name); p != cache.end()) {
                             new_cache[name] = std::move(p->second);
                         } else if(name == target) {
-                            new_cache[name] = Image{graphic, read_captions((Path(name).replace_extension(".txt")).c_str())};
+                            new_cache[name] = Image{std::move(graphic), read_captions((Path(name).replace_extension(".txt")).c_str())};
                         }
                     }
                     cache = std::move(new_cache);
