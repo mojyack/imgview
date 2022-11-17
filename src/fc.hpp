@@ -2,8 +2,10 @@
 
 #include <string>
 
+#include "util/error.hpp"
+
 namespace fc {
-inline auto find_fontpath_from_name(const char* const name) -> std::string {
+inline auto find_fontpath_from_name(const char* const name) -> Result<std::string> {
     const auto config  = FcInitLoadConfigAndFonts();
     const auto pattern = FcNameParse((const FcChar8*)(name));
     FcConfigSubstitute(config, pattern, FcMatchPattern);
@@ -11,7 +13,7 @@ inline auto find_fontpath_from_name(const char* const name) -> std::string {
 
     auto       result = FcResult();
     const auto font   = FcFontMatch(config, pattern, &result);
-    auto       path   = std::string();
+    auto       path   = Result<std::string>(Error("failed to find font"));
     if(font) {
         auto file = (FcChar8*)(nullptr);
         if(FcPatternGetString(font, FC_FILE, 0, &file) == FcResultMatch) {

@@ -2,6 +2,10 @@
 #include "type.hpp"
 
 inline auto read_captions(const char* const path) -> std::vector<Caption> {
+    if(!std::filesystem::is_regular_file(path)) {
+        return std::vector<Caption>();
+    }
+
     auto r = std::vector<Caption>();
     auto s = std::ifstream(path);
 

@@ -18,7 +18,7 @@ struct PixelBuffer {
             return Error("overlay size mismatched");
         }
         for(auto i = size_t(0); i < width * height; i += 1) {
-            auto f = (o.data[i] & 0xFF000000) / 0xFF000000;
+            auto f  = (o.data[i] & 0xFF000000) / 0xFF000000;
             data[i] = o.data[i] * f + data[i] * (1 - f);
         }
         return Error();
@@ -45,22 +45,22 @@ class LayerGraphic {
     gawl::Graphic                             graphic;
     std::vector<std::shared_ptr<PixelBuffer>> buffers;
 
-    auto create_graphic() -> Error {
+    static auto from_pixel_buffers(std::vector<std::shared_ptr<PixelBuffer>> buffers) -> Result<LayerGraphic> {
         auto buffer = *buffers[0];
         for(auto i = buffers.begin() + 1; i != buffers.end(); i += 1) {
             if(const auto e = buffer.overlay(**i)) {
                 return e;
             }
         }
-        graphic = gawl::Graphic(gawl::PixelBuffer(buffer.width, buffer.height, reinterpret_cast<const uint8_t*>(buffer.data.data())));
-        return Error();
+        const auto pixelbuffer = gawl::PixelBuffer::from_raw(buffer.width, buffer.height, reinterpret_cast<const uint8_t*>(buffer.data.data()));
+        return LayerGraphic(std::move(buffers), pixelbuffer);
     }
 
-    LayerGraphic(std::vector<std::shared_ptr<PixelBuffer>> buffers) : buffers(std::move(buffers)) {}
+    LayerGraphic(std::vector<std::shared_ptr<PixelBuffer>> buffers, const gawl::PixelBuffer& composed) : graphic(composed), buffers(std::move(buffers)) {}
 
   public:
-    auto get_graphic() -> gawl::Graphic {
-        return graphic;
+    auto get_graphic() -> gawl::Graphic* {
+        return &graphic;
     }
 };
 
@@ -143,7 +143,7 @@ class LayerGraphicFactory {
                         buffers[f] = std::move(buf);
                     }
                 } else {
-                    auto buf      = std::shared_ptr<PixelBuffer>(new PixelBuffer(f.data()));
+                    auto buf     = std::shared_ptr<PixelBuffer>(new PixelBuffer(f.data()));
                     fragments[f] = buf;
                     buffers[f]   = std::move(buf);
                 }
@@ -156,12 +156,7 @@ class LayerGraphicFactory {
             ordered_buffers.emplace_back(std::move(buffers[*i]));
         }
 
-        auto layer = LayerGraphic(std::move(ordered_buffers));
-        if(const auto e = layer.create_graphic()) {
-            return e;
-        }
-
-        return layer;
+        return LayerGraphic::from_pixel_buffers(std::move(ordered_buffers));
     }
 };
 } // namespace graphic::layer

@@ -21,14 +21,14 @@ using Gawl = gawl::Gawl<Imgview>;
 
 class Imgview {
   private:
-    using Cache = std::unordered_map<std::string, Image>;
+    using Cache = std::unordered_map<std::string, std::shared_ptr<Image>>;
 
     Gawl::Window<Imgview>& window;
     gawl::TextRender       font;
     std::string            root;
     Critical<IndexedPaths> critical_files;
     Critical<Cache>        critical_cache;
-    gawl::Graphic          displayed_graphic;
+    std::shared_ptr<Image> displayed_image;
     std::thread            loader;
     Event                  loader_event;
     bool                   loader_exit = false;
@@ -190,13 +190,13 @@ class Imgview {
                 if(p == cache.end()) {
                     break;
                 }
-                auto graphic = p->second.graphic.visit([](auto& g) { return g.get_graphic(); });
-                if(!graphic) {
+                auto graphic = p->second->graphic.visit([](auto& g) { return g.get_graphic(); });
+                if(graphic == nullptr) {
                     break;
                 }
 
                 reset_draw_pos();
-                const auto  size  = std::array{graphic.get_width(window), graphic.get_height(window)};
+                const auto  size  = std::array{graphic->get_width(window), graphic->get_height(window)};
                 const auto& wsize = window.get_window_size();
                 const auto  area  = gawl::calc_fit_rect({{0, 0}, {1. * wsize[0], 1. * wsize[1]}}, size[0], size[1]);
                 draw_scale        = action == Actions::FitWidth ? (wsize[0] - area.width()) / size[0] : (wsize[1] - area.height()) / size[1];
@@ -231,13 +231,13 @@ class Imgview {
         if(p == cache.end()) {
             return;
         }
-        auto graphic = p->second.graphic.visit([](auto& g) { return g.get_graphic(); });
-        if(!graphic) {
+        auto graphic = p->second->graphic.visit([](auto& g) { return g.get_graphic(); });
+        if(graphic == nullptr) {
             return;
         }
 
-        const auto   area     = calc_draw_area(graphic);
-        const auto   delta    = std::array{graphic.get_width(window) * value, graphic.get_height(window) * value};
+        const auto   area     = calc_draw_area(*graphic);
+        const auto   delta    = std::array{graphic->get_width(window) * value, graphic->get_height(window) * value};
         const double center_x = area.a.x + area.width() / 2;
         const double center_y = area.a.y + area.height() / 2;
         draw_offset[0] += (center_x - origin.x) / area.width() * delta[0];
@@ -262,12 +262,12 @@ class Imgview {
 
     auto is_point_in_caption(gawl::Point point, Image& image) const -> std::optional<CaptionDrawHint> {
         auto graphic = image.graphic.visit([](auto& g) { return g.get_graphic(); });
-        if(!graphic || image.captions.empty()) {
+        if(graphic == nullptr || image.captions.empty()) {
             return std::nullopt;
         }
-        const auto draw_area = calc_draw_area(graphic);
-        const auto w         = graphic.get_width(gawl::NullScreen());
-        const auto h         = graphic.get_height(gawl::NullScreen());
+        const auto draw_area = calc_draw_area(*graphic);
+        const auto w         = graphic->get_width(gawl::NullScreen());
+        const auto h         = graphic->get_height(gawl::NullScreen());
         const auto wr        = w / draw_area.width();
         const auto hr        = h / draw_area.height();
         point.x              = (point.x - draw_area.a.x) * wr;
@@ -285,6 +285,36 @@ class Imgview {
         return std::nullopt;
     }
 
+    auto draw_image(std::shared_ptr<Image>& image) -> void {
+        const auto [width, height] = window.get_window_size();
+
+        auto graphic = image->graphic.visit([](auto& g) { return g.get_graphic(); });
+        if(graphic == nullptr) {
+            auto message = "broken image";
+            if(const auto m = std::get_if<graphic::message::MessageGraphic>(&image->graphic.as_variant()); m != nullptr) {
+                message = m->get_message().data();
+            }
+            font.draw_fit_rect(window, {{0, 0}, {1. * width, 1. * height}}, {1, 1, 1, 1}, message);
+        } else {
+            const auto area = calc_draw_area(*graphic);
+            displayed_image = image;
+            graphic->draw_rect(window, area);
+
+            if(pointer_pos.has_value()) {
+                const auto caption = is_point_in_caption(*pointer_pos, *image);
+                if(caption.has_value()) {
+                    const auto& c = caption.value().caption;
+                    auto        a = caption.value().area;
+                    const auto  e = caption.value().ext;
+                    gawl::mask_alpha();
+                    gawl::draw_rect(window, a, {0, 0, 0, 0.6});
+                    font.draw_wrapped(window, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
+                    gawl::unmask_alpha();
+                }
+            }
+        }
+    }
+
   public:
     auto refresh_callback() -> void {
         gawl::clear_screen({0, 0, 0, 0});
@@ -297,35 +327,10 @@ class Imgview {
         {
             const auto [lock, cache] = critical_cache.access();
             if(const auto p = cache.find(path); p != cache.end()) {
-                auto graphic = p->second.graphic.visit([](auto& g) { return g.get_graphic(); });
-                if(!graphic) {
-                    auto message = "broken image";
-                    if(const auto m = std::get_if<graphic::message::MessageGraphic>(&p->second.graphic.as_variant()); m != nullptr) {
-                        message = m->get_message().data();
-                    }
-                    font.draw_fit_rect(window, {{0, 0}, {1. * width, 1. * height}}, {1, 1, 1, 1}, message);
-                } else {
-                    const auto area   = calc_draw_area(graphic);
-                    displayed_graphic = graphic;
-                    displayed_graphic.draw_rect(window, area);
-
-                    if(pointer_pos.has_value()) {
-                        const auto caption = is_point_in_caption(*pointer_pos, p->second);
-                        if(caption.has_value()) {
-                            const auto& c = caption.value().caption;
-                            auto        a = caption.value().area;
-                            const auto  e = caption.value().ext;
-                            gawl::mask_alpha();
-                            gawl::draw_rect(window, a, {0, 0, 0, 0.6});
-                            font.draw_wrapped(window, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
-                            gawl::unmask_alpha();
-                        }
-                    }
-                }
+                draw_image(p->second);
             } else {
-                if(displayed_graphic) {
-                    const auto area = calc_draw_area(displayed_graphic);
-                    displayed_graphic.draw_rect(window, area);
+                if(displayed_image) {
+                    draw_image(displayed_image);
                 }
                 font.draw_fit_rect(window, {{0, 0}, {1. * width, 1. * height}}, {1, 1, 1, 1}, "loading...");
             }
@@ -420,7 +425,7 @@ class Imgview {
                 return;
             }
 
-            const auto c = is_point_in_caption(point, p->second);
+            const auto c = is_point_in_caption(point, *p->second);
             if(c.has_value()) {
                 if(current_caption != &c->caption) {
                     current_caption = &c->caption;
@@ -476,7 +481,8 @@ class Imgview {
         window.refresh();
     }
 
-    Imgview(Gawl::Window<Imgview>& window, const char* const path) : window(window) {
+    Imgview(Gawl::Window<Imgview>& window, const char* const path) : window(window),
+                                                                     font(gawl::TextRender({fc::find_fontpath_from_name("Noto Sans CJK JP:style=Bold").unwrap().data()}, 16)) {
         if(!std::filesystem::exists(path)) {
             exit(1);
             window.quit_application();
@@ -523,51 +529,53 @@ class Imgview {
                         }
                     }
                 }
-                if(!target.empty()) {
-                    auto graphic = Graphic(graphic::message::MessageGraphic("not loaded"));
-                    if(std::filesystem::path(target).extension() == ".layer") {
-                        auto r = layer_graphic_factory.create_graphic(target);
-                        if(r) {
-                            graphic = std::move(r.as_value());
-                        } else {
-                            graphic = graphic::message::MessageGraphic(r.as_error().cstr());
-                        }
-                    } else {
-                        graphic = graphic::single::SingleGraphic(target.data());
-                    }
-                    context.wait();
-
-                    auto [lock0, files] = critical_files.access();
-                    auto [lock1, cache] = critical_cache.access();
-
-                    auto new_cache = Cache();
-
-                    for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
-                        const auto index = static_cast<int>(files.get_index()) + i;
-                        if(index < 0 || index >= static_cast<int>(files.size())) {
-                            continue;
-                        }
-
-                        const auto name = files[index];
-                        if(auto p = cache.find(name); p != cache.end()) {
-                            new_cache[name] = std::move(p->second);
-                        } else if(name == target) {
-                            new_cache[name] = Image{std::move(graphic), read_captions((Path(name).replace_extension(".txt")).c_str())};
-                        }
-                    }
-                    cache = std::move(new_cache);
-                    window.refresh();
-                } else {
+                if(target.empty()) {
                     loader_event.wait();
+                    continue;
                 }
+
+                auto image = std::shared_ptr<Image>();
+                if(std::filesystem::path(target).extension() == ".layer") {
+                    auto r = layer_graphic_factory.create_graphic(target);
+                    if(r) {
+                        auto captions = read_captions((Path(target).replace_extension(".txt")).c_str());
+                        image.reset(new Image{std::move(r.as_value()), std::move(captions)});
+                    } else {
+                        image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
+                    }
+                } else {
+                    auto r = graphic::single::SingleGraphic::from_file(target.data());
+                    if(r) {
+                        auto captions = read_captions((Path(target).replace_extension(".txt")).c_str());
+                        image.reset(new Image{std::move(r.as_value()), std::move(captions)});
+                    } else {
+                        image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
+                    }
+                }
+                context.wait();
+
+                auto [lock0, files] = critical_files.access();
+                auto [lock1, cache] = critical_cache.access();
+
+                auto new_cache = Cache();
+
+                for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
+                    const auto index = static_cast<int>(files.get_index()) + i;
+                    if(index < 0 || index >= static_cast<int>(files.size())) {
+                        continue;
+                    }
+
+                    const auto name = files[index];
+                    if(auto p = cache.find(name); p != cache.end()) {
+                        new_cache[name] = std::move(p->second);
+                    } else if(name == target) {
+                        new_cache[name] = std::move(image);
+                    }
+                }
+                cache = std::move(new_cache);
+                window.refresh();
             }
         });
-
-        const auto font_path = fc::find_fontpath_from_name("Noto Sans CJK JP:style=Bold");
-        if(font_path.empty()) {
-            throw std::runtime_error("failed to find font");
-        }
-        font = gawl::TextRender({font_path.data()}, 16);
     }
 
     ~Imgview() {
