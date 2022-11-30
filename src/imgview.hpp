@@ -170,10 +170,10 @@ class Imgview {
             break;
         case Actions::MoveDrawPos: {
             constexpr auto speed = 60.0;
-            draw_offset[0] += key == KEY_L ? speed : key == KEY_H ? -speed
-                                                                  : 0;
-            draw_offset[1] += key == KEY_J ? speed : key == KEY_K ? -speed
-                                                                  : 0;
+            draw_offset[0] += key == KEY_L ? -speed : key == KEY_H ? speed
+                                                                   : 0;
+            draw_offset[1] += key == KEY_J ? -speed : key == KEY_K ? speed
+                                                                   : 0;
             window.refresh();
         } break;
         case Actions::ResetDrawPos:
@@ -273,7 +273,7 @@ class Imgview {
         point.x              = (point.x - draw_area.a.x) * wr;
         point.y              = (point.y - draw_area.a.y) * hr;
 
-        for(const auto& c : image.captions) {
+        for(auto& c : image.captions) {
             if(c.area[0] <= point.x && c.area[1] <= point.y && c.area[2] >= point.x && c.area[3] >= point.y) {
                 const auto x1 = c.area[0] / wr + draw_area.a.x;
                 const auto y1 = c.area[1] / hr + draw_area.a.y;
@@ -288,6 +288,21 @@ class Imgview {
     auto draw_image(std::shared_ptr<Image>& image) -> void {
         const auto [width, height] = window.get_window_size();
 
+        if(std::holds_alternative<graphic::text::TextGraphic>(image->graphic.as_variant())) {
+            constexpr auto font_size = 16;
+
+            auto& text_graphic        = image->graphic.get<graphic::text::TextGraphic>();
+            auto [text, wrapped_text] = text_graphic.get_text();
+            const auto content_height = font.calc_wrapped_text_height(window, width, font_size * 1.3, text, wrapped_text, font_size);
+            const auto rect           = gawl::Rectangle{{0, draw_offset[1]}, {1. * width, draw_offset[1] + content_height}};
+
+            gawl::draw_rect(window, rect, {0, 0, 0, 0.6});
+            gawl::mask_alpha();
+            font.draw_wrapped(window, rect, font_size * 1.3, {1, 1, 1, 1}, text, wrapped_text, font_size, gawl::Align::Left, gawl::Align::Left);
+            gawl::unmask_alpha();
+            return;
+        }
+
         auto graphic = image->graphic.visit([](auto& g) { return g.get_graphic(); });
         if(graphic == nullptr) {
             auto message = "broken image";
@@ -301,14 +316,14 @@ class Imgview {
             graphic->draw_rect(window, area);
 
             if(pointer_pos.has_value()) {
-                const auto caption = is_point_in_caption(*pointer_pos, *image);
+                auto caption = is_point_in_caption(*pointer_pos, *image);
                 if(caption.has_value()) {
-                    const auto& c = caption.value().caption;
-                    auto        a = caption.value().area;
-                    const auto  e = caption.value().ext;
-                    gawl::mask_alpha();
+                    auto&      c = caption->caption;
+                    auto       a = caption->area;
+                    const auto e = caption->ext;
                     gawl::draw_rect(window, a, {0, 0, 0, 0.6});
-                    font.draw_wrapped(window, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text.data(), static_cast<int>(c.size / e), c.alignx, c.aligny);
+                    gawl::mask_alpha();
+                    font.draw_wrapped(window, a.expand(-4, -4), c.size * 1.3 / e, {1, 1, 1, 1}, c.text, c.wrapped_text, static_cast<int>(c.size / e), c.alignx, c.aligny);
                     gawl::unmask_alpha();
                 }
             }
@@ -534,12 +549,20 @@ class Imgview {
                     continue;
                 }
 
-                auto image = std::shared_ptr<Image>();
-                if(std::filesystem::path(target).extension() == ".layer") {
+                auto       image     = std::shared_ptr<Image>();
+                const auto extension = std::filesystem::path(target).extension();
+                if(extension == ".layer") {
                     auto r = layer_graphic_factory.create_graphic(target);
                     if(r) {
                         auto captions = read_captions((Path(target).replace_extension(".txt")).c_str());
                         image.reset(new Image{std::move(r.as_value()), std::move(captions)});
+                    } else {
+                        image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
+                    }
+                } else if(extension == ".txt") {
+                    auto r = graphic::text::TextGraphic::from_file(target);
+                    if(r) {
+                        image.reset(new Image{std::move(r.as_value()), {}});
                     } else {
                         image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
                     }

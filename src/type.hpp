@@ -2,18 +2,26 @@
 #include "graphic/layer.hpp"
 #include "graphic/message.hpp"
 #include "graphic/single.hpp"
+#include "graphic/text.hpp"
 #include "util/variant.hpp"
 
 struct Caption {
     std::array<size_t, 4> area;
     std::string           text;
+    gawl::WrappedText     wrapped_text;
 
     int         size;
     gawl::Align alignx;
     gawl::Align aligny;
 };
 
-using Graphic = Variant<graphic::single::SingleGraphic, graphic::layer::LayerGraphic, graphic::message::MessageGraphic>;
+struct CaptionDrawHint {
+    Caption&        caption;
+    gawl::Rectangle area;
+    double          ext;
+};
+
+using Graphic = Variant<graphic::single::SingleGraphic, graphic::layer::LayerGraphic, graphic::message::MessageGraphic, graphic::text::TextGraphic>;
 
 struct Image {
     Graphic              graphic;
@@ -44,10 +52,4 @@ enum class InfoFormats {
     None,
     Short,
     Long,
-};
-
-struct CaptionDrawHint {
-    const Caption&  caption;
-    gawl::Rectangle area;
-    double          ext;
 };
