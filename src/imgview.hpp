@@ -13,6 +13,7 @@
 #include "path.hpp"
 #include "type.hpp"
 #include "util/error.hpp"
+#include "util/string-map.hpp"
 #include "util/thread.hpp"
 
 class Imgview;
@@ -21,7 +22,7 @@ using Gawl = gawl::Gawl<Imgview>;
 
 class Imgview {
   private:
-    using Cache = std::unordered_map<std::string, std::shared_ptr<Image>>;
+    using Cache = StringMap<std::shared_ptr<Image>>;
 
     Gawl::Window<Imgview>& window;
     gawl::TextRender       font;

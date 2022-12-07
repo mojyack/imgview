@@ -5,6 +5,7 @@
 #include <gawl/wayland/gawl.hpp>
 
 #include "../util/error.hpp"
+#include "../util/string-map.hpp"
 #include "../util/thread.hpp"
 
 namespace graphic::layer {
@@ -52,7 +53,7 @@ class LayerGraphic {
                 return e;
             }
         }
-        const auto pixelbuffer = gawl::PixelBuffer::from_raw(buffer.width, buffer.height, reinterpret_cast<const uint8_t*>(buffer.data.data()));
+        const auto pixelbuffer = gawl::PixelBuffer::from_raw(buffer.width, buffer.height, reinterpret_cast<const std::byte*>(buffer.data.data()));
         return LayerGraphic(std::move(buffers), pixelbuffer);
     }
 
@@ -103,9 +104,9 @@ struct LayerScript {
 
 class LayerGraphicFactory {
   private:
-    Critical<std::unordered_map<std::string, std::weak_ptr<PixelBuffer>>> critical_fragments;
+    Critical<StringMap<std::weak_ptr<PixelBuffer>>> critical_fragments;
 
-    auto clear_freed_fragment_info(std::unordered_map<std::string, std::weak_ptr<PixelBuffer>>& fragments) -> void {
+    auto clear_freed_fragment_info(StringMap<std::weak_ptr<PixelBuffer>>& fragments) -> void {
         for(auto i = fragments.begin(); i != fragments.end(); i = std::next(i)) {
             if(i->second.expired()) {
                 i = fragments.erase(i);
@@ -131,7 +132,7 @@ class LayerGraphicFactory {
             return e;
         }
 
-        auto buffers = std::unordered_map<std::string, std::shared_ptr<PixelBuffer>>();
+        auto buffers = StringMap<std::shared_ptr<PixelBuffer>>();
 
         {
             auto [lock, fragments] = critical_fragments.access();
