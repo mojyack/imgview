@@ -394,10 +394,10 @@ class Imgview {
         };
         const static KeyBind keybinds[] = {
             {Actions::QuitApp, {KEY_Q, KEY_BACKSLASH}},
-            {Actions::NextWork, {KEY_DOWN}},
-            {Actions::PrevWork, {KEY_UP}},
-            {Actions::NextPage, {KEY_X, KEY_RIGHT, KEY_SPACE}},
-            {Actions::PrevPage, {KEY_Z, KEY_PAGEDOWN}},
+            {Actions::NextWork, {KEY_PAGEDOWN}},
+            {Actions::PrevWork, {KEY_PAGEUP}},
+            {Actions::NextPage, {KEY_X, KEY_DOWN, KEY_SPACE}},
+            {Actions::PrevPage, {KEY_Z, KEY_UP}},
             {Actions::RefreshFiles, {KEY_R}},
             {Actions::PageSelectOn, {KEY_P}, [this]() -> bool { return !page_select; }},
             {Actions::PageSelectOff, {KEY_ESC, KEY_P}, [this]() -> bool { return page_select; }},
