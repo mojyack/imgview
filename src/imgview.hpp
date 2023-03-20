@@ -5,10 +5,10 @@
 #include <string>
 #include <unordered_map>
 
+#include <gawl/fc.hpp>
 #include <gawl/wayland/gawl.hpp>
 
 #include "caption.hpp"
-#include "fc.hpp"
 #include "indexed-paths.hpp"
 #include "path.hpp"
 #include "type.hpp"
@@ -24,15 +24,18 @@ class Imgview {
   private:
     using Cache = StringMap<std::shared_ptr<Image>>;
 
+    static constexpr auto num_loaders = 3;
+
     Gawl::Window<Imgview>& window;
     gawl::TextRender       font;
     std::string            root;
     Critical<IndexedPaths> critical_files;
     Critical<Cache>        critical_cache;
     std::shared_ptr<Image> displayed_image;
-    std::thread            loader;
-    Event                  loader_event;
-    bool                   loader_exit = false;
+
+    std::array<std::thread, num_loaders> loaders;
+    Event                                loader_event;
+    bool                                 loader_exit = false;
 
     graphic::layer::LayerGraphicFactory layer_graphic_factory;
 
@@ -188,7 +191,7 @@ class Imgview {
                 auto [lock1, cache] = critical_cache.access();
                 const auto path     = files.get_current();
                 const auto p        = cache.find(path);
-                if(p == cache.end()) {
+                if(p == cache.end() || !p->second) {
                     break;
                 }
                 auto graphic = p->second->graphic.visit([](auto& g) { return g.get_graphic(); });
@@ -229,7 +232,7 @@ class Imgview {
         auto [lock1, cache] = critical_cache.access();
         const auto path     = files.get_current();
         const auto p        = cache.find(path);
-        if(p == cache.end()) {
+        if(p == cache.end() || !p->second) {
             return;
         }
         auto graphic = p->second->graphic.visit([](auto& g) { return g.get_graphic(); });
@@ -331,6 +334,94 @@ class Imgview {
         }
     }
 
+    auto loader_main() -> void {
+        auto iterate = [](const IndexedPaths& files, std::function<bool(std::string)> func) -> void {
+            constexpr auto cache_range = 5;
+
+            for(auto i = 0; std::abs(i) < cache_range; i == 0 ? i = 1 : (i > 0 ? i = -i : i = -i + 1)) {
+                const auto index = static_cast<int>(files.get_index()) + i;
+                if(index < 0 || index >= static_cast<int>(files.size())) {
+                    continue;
+                }
+
+                if(!func(files[index])) {
+                    break;
+                }
+            }
+        };
+
+        auto context = window.fork_context();
+
+    loop:
+        if(loader_exit) {
+            return;
+        }
+
+        auto target = std::string();
+        {
+            auto [lock0, files] = critical_files.access();
+            auto [lock1, cache] = critical_cache.access();
+            iterate(files, [&target, cache = &cache](std::string name) -> bool {
+                if(!cache->contains(name)) {
+                    (*cache)[name] = std::shared_ptr<Image>();
+                    target         = std::move(name);
+                    return false;
+                }
+                return true;
+            });
+        }
+        if(target.empty()) {
+            loader_event.wait();
+            goto loop;
+        }
+
+        auto       image     = std::shared_ptr<Image>();
+        const auto extension = std::filesystem::path(target).extension();
+        if(extension == ".layer") {
+            auto r = layer_graphic_factory.create_graphic(target);
+            if(r) {
+                auto captions = read_captions((Path(target).replace_extension(".txt")).c_str());
+                image.reset(new Image{std::move(r.as_value()), std::move(captions)});
+            } else {
+                image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
+            }
+        } else if(extension == ".txt") {
+            auto r = graphic::text::TextGraphic::from_file(target);
+            if(r) {
+                image.reset(new Image{std::move(r.as_value()), {}});
+            } else {
+                image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
+            }
+        } else {
+            auto r = graphic::single::SingleGraphic::from_file(target.data());
+            if(r) {
+                auto captions = read_captions((Path(target).replace_extension(".txt")).c_str());
+                image.reset(new Image{std::move(r.as_value()), std::move(captions)});
+            } else {
+                image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
+            }
+        }
+        context.wait();
+
+        auto [lock0, files] = critical_files.access();
+        auto [lock1, cache] = critical_cache.access();
+
+        auto new_cache = Cache();
+
+        iterate(files, [&target, &new_cache, &image, cache = &cache](std::string name) -> bool {
+            if(name == target) {
+                new_cache[name] = std::move(image);
+            } else if(auto p = cache->find(name); p != cache->end()) {
+                new_cache[name] = std::move(p->second);
+            }
+            return true;
+        });
+
+        cache = std::move(new_cache);
+        window.refresh();
+        goto loop;
+    }
+
   public:
     auto refresh_callback() -> void {
         gawl::clear_screen({0, 0, 0, 0});
@@ -342,7 +433,7 @@ class Imgview {
         const auto path = files.get_current();
         {
             const auto [lock, cache] = critical_cache.access();
-            if(const auto p = cache.find(path); p != cache.end()) {
+            if(const auto p = cache.find(path); p != cache.end() && p->second) {
                 draw_image(p->second);
             } else {
                 if(displayed_image) {
@@ -394,10 +485,10 @@ class Imgview {
         };
         const static KeyBind keybinds[] = {
             {Actions::QuitApp, {KEY_Q, KEY_BACKSLASH}},
-            {Actions::NextWork, {KEY_PAGEDOWN}},
-            {Actions::PrevWork, {KEY_PAGEUP}},
-            {Actions::NextPage, {KEY_X, KEY_DOWN, KEY_SPACE}},
-            {Actions::PrevPage, {KEY_Z, KEY_UP}},
+            {Actions::NextWork, {KEY_DOWN}},
+            {Actions::PrevWork, {KEY_UP}},
+            {Actions::NextPage, {KEY_X, KEY_RIGHT, KEY_SPACE}},
+            {Actions::PrevPage, {KEY_Z, KEY_PAGEDOWN}},
             {Actions::RefreshFiles, {KEY_R}},
             {Actions::PageSelectOn, {KEY_P}, [this]() -> bool { return !page_select; }},
             {Actions::PageSelectOff, {KEY_ESC, KEY_P}, [this]() -> bool { return page_select; }},
@@ -437,7 +528,7 @@ class Imgview {
             auto [lock1, cache] = critical_cache.access();
             const auto path     = files.get_current();
             const auto p        = cache.find(path);
-            if(p == cache.end()) {
+            if(p == cache.end() || !p->second) {
                 return;
             }
 
@@ -498,7 +589,7 @@ class Imgview {
     }
 
     Imgview(Gawl::Window<Imgview>& window, const char* const path) : window(window),
-                                                                     font(gawl::TextRender({fc::find_fontpath_from_name("Noto Sans CJK JP:style=Bold").unwrap().data()}, 16)) {
+                                                                     font(gawl::TextRender({gawl::find_fontpath_from_name("Noto Sans CJK JP:style=Bold").unwrap().data()}, 16)) {
         if(!std::filesystem::exists(path)) {
             exit(1);
             window.quit_application();
@@ -523,89 +614,15 @@ class Imgview {
         critical_files.unsafe_access() = std::move(new_files);
         root                           = dir.parent_path().string();
 
-        loader = std::thread([this, &window]() {
-            constexpr auto BUFFER_RANGE_LIMIT = 3;
-
-            auto context = window.fork_context();
-            while(!loader_exit) {
-                auto target = std::string();
-                {
-                    auto [lock0, files] = critical_files.access();
-                    auto [lock1, cache] = critical_cache.access();
-                    for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
-                        const auto index = static_cast<int>(files.get_index()) + i;
-                        if(index < 0 || index >= static_cast<int>(files.size())) {
-                            continue;
-                        }
-
-                        auto name = files[index];
-                        if(!cache.contains(name)) {
-                            target = std::move(name);
-                            break;
-                        }
-                    }
-                }
-                if(target.empty()) {
-                    loader_event.wait();
-                    continue;
-                }
-
-                auto       image     = std::shared_ptr<Image>();
-                const auto extension = std::filesystem::path(target).extension();
-                if(extension == ".layer") {
-                    auto r = layer_graphic_factory.create_graphic(target);
-                    if(r) {
-                        auto captions = read_captions((Path(target).replace_extension(".txt")).c_str());
-                        image.reset(new Image{std::move(r.as_value()), std::move(captions)});
-                    } else {
-                        image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
-                    }
-                } else if(extension == ".txt") {
-                    auto r = graphic::text::TextGraphic::from_file(target);
-                    if(r) {
-                        image.reset(new Image{std::move(r.as_value()), {}});
-                    } else {
-                        image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
-                    }
-                } else {
-                    auto r = graphic::single::SingleGraphic::from_file(target.data());
-                    if(r) {
-                        auto captions = read_captions((Path(target).replace_extension(".txt")).c_str());
-                        image.reset(new Image{std::move(r.as_value()), std::move(captions)});
-                    } else {
-                        image.reset(new Image{graphic::message::MessageGraphic(r.as_error().cstr()), {}});
-                    }
-                }
-                context.wait();
-
-                auto [lock0, files] = critical_files.access();
-                auto [lock1, cache] = critical_cache.access();
-
-                auto new_cache = Cache();
-
-                for(auto i = 0; std::abs(i) < BUFFER_RANGE_LIMIT; i == 0 ? i = 1 : (i > 0 ? i *= -1 : i = i * -1 + 1)) {
-                    const auto index = static_cast<int>(files.get_index()) + i;
-                    if(index < 0 || index >= static_cast<int>(files.size())) {
-                        continue;
-                    }
-
-                    const auto name = files[index];
-                    if(auto p = cache.find(name); p != cache.end()) {
-                        new_cache[name] = std::move(p->second);
-                    } else if(name == target) {
-                        new_cache[name] = std::move(image);
-                    }
-                }
-                cache = std::move(new_cache);
-                window.refresh();
-            }
-        });
+        for(auto& loader : loaders) {
+            loader = std::thread(std::bind(&Imgview::loader_main, this));
+        }
     }
 
     ~Imgview() {
-        if(loader.joinable()) {
-            loader_exit = true;
-            loader_event.wakeup();
+        loader_exit = true;
+        loader_event.wakeup();
+        for(auto& loader : loaders) {
             loader.join();
         }
     }
