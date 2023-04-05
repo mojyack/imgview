@@ -1,7 +1,7 @@
 #pragma once
 #include <format>
 
-#include <gawl/wayland/gawl.hpp>
+#include <gawl/graphic.hpp>
 
 namespace graphic::message {
 class MessageGraphic {

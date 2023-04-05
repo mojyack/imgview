@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include <gawl/fc.hpp>
+#include <gawl/null-screen.hpp>
 #include <gawl/wayland/gawl.hpp>
 
 #include "caption.hpp"
@@ -16,17 +17,13 @@
 #include "util/string-map.hpp"
 #include "util/thread.hpp"
 
-class Imgview;
-
-using Gawl = gawl::Gawl<Imgview>;
-
 class Imgview {
   private:
     using Cache = StringMap<std::shared_ptr<Image>>;
 
     static constexpr auto num_loaders = 3;
 
-    Gawl::Window<Imgview>& window;
+    gawl::Window<Imgview>& window;
     gawl::TextRender       font;
     std::string            root;
     Critical<IndexedPaths> critical_files;
@@ -520,7 +517,7 @@ class Imgview {
         do_action(action, key - 8);
     }
 
-    auto pointermove_callback(const gawl::Point& point) -> void {
+    auto pointer_move_callback(const gawl::Point& point) -> void {
         auto do_refresh = false;
         {
 
@@ -588,7 +585,7 @@ class Imgview {
         window.refresh();
     }
 
-    Imgview(Gawl::Window<Imgview>& window, const char* const path) : window(window),
+    Imgview(gawl::Window<Imgview>& window, const char* const path) : window(window),
                                                                      font(gawl::TextRender({gawl::find_fontpath_from_name("Noto Sans CJK JP:style=Bold").unwrap().data()}, 16)) {
         if(!std::filesystem::exists(path)) {
             exit(1);

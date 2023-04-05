@@ -1,7 +1,8 @@
 #pragma once
 #include <fstream>
 
-#include <gawl/wayland/gawl.hpp>
+#include <gawl/graphic.hpp>
+#include <gawl/textrender.hpp>
 
 #include "../util/error.hpp"
 

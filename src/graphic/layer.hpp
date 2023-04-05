@@ -2,7 +2,7 @@
 #include <fstream>
 
 #include <ImageMagick-7/Magick++.h>
-#include <gawl/wayland/gawl.hpp>
+#include <gawl/graphic.hpp>
 
 #include "../util/error.hpp"
 #include "../util/string-map.hpp"

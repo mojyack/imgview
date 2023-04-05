@@ -1,5 +1,5 @@
 #pragma once
-#include <gawl/wayland/gawl.hpp>
+#include <gawl/graphic.hpp>
 
 #include "../util/error.hpp"
 
