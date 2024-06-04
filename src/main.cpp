@@ -1,16 +1,15 @@
-#define GAWL_KEYSYM
-#define GAWL_MOUSE
-#include <gawl/wayland/gawl.hpp>
+#include "gawl/wayland/application.hpp"
 
 #include "imgview.hpp"
+#include "macros/assert.hpp"
+#include "util/assert.hpp"
 
-int main(const int argc, const char* const argv[]) {
-    if(argc != 2) {
-        return 0;
-    }
-
-    auto app = gawl::Application();
-    app.open_window<Imgview>({.title = "Imgview", .manual_refresh = true}, argv[1]);
+auto main(const int argc, const char* const argv[]) -> int {
+    auto callbacks = std::shared_ptr<Callbacks>(new Callbacks());
+    assert_v(callbacks->init(argc, argv), 1);
+    auto app = gawl::WaylandApplication();
+    app.open_window({.manual_refresh = true}, callbacks);
+    callbacks->run();
     app.run();
     return 0;
 }
