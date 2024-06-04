@@ -15,7 +15,6 @@
 
 namespace {
 auto find_current_index(const std::filesystem::path dir) -> std::optional<FileList> {
-    print(dir);
     unwrap_oo_mut(list, list_files(dir.parent_path().string()));
     filter_regular_files(list);
     for(auto i = size_t(0); i < list.files.size(); i += 1) {
