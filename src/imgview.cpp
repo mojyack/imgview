@@ -346,15 +346,15 @@ auto Callbacks::on_scroll(gawl::WheelAxis /*axis*/, double /*value*/) -> void {
 auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
     assert_b(argc > 1);
 
-    auto list = FileList();
+    const auto abs  = std::filesystem::absolute(argv[1]);
+    auto       list = FileList();
     if(argc == 2) {
         if(std::filesystem::is_directory(argv[1])) {
-            unwrap_ob_mut(l, list_files(argv[1]));
+            unwrap_ob_mut(l, list_files(abs.string()));
             list = std::move(l);
             filter_non_image_files(list);
             assert_b(!list.files.empty());
         } else if(std::filesystem::is_regular_file(argv[1])) {
-            const auto abs = std::filesystem::absolute(argv[1]);
             unwrap_ob_mut(l, list_files(abs.parent_path().string()));
             list = std::move(l);
             filter_non_image_files(list);
@@ -369,8 +369,8 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
             return false;
         }
     } else {
-        list.prefix = std::filesystem::absolute(argv[1]).parent_path();
-        for(auto i = 2; i < argc; i += 1) {
+        list.prefix = abs.parent_path();
+        for(auto i = 1; i < argc; i += 1) {
             list.files.push_back(std::filesystem::path(argv[i]).filename());
         }
     }
