@@ -4,19 +4,22 @@
 #include "displayable/image.hpp"
 #include "displayable/text.hpp"
 #include "file-list.hpp"
+#include "gawl/application.hpp"
 #include "gawl/fc.hpp"
 #include "gawl/misc.hpp"
-#include "gawl/wayland/application.hpp"
+#include "gawl/wayland/window.hpp"
 #include "imgview.hpp"
 #include "macros/unwrap.hpp"
 #include "util/assert.hpp"
 #include "util/charconv.hpp"
 
 namespace {
-auto find_current_index(const std::filesystem::path path) -> std::optional<FileList> {
-    auto list = list_files(path.parent_path().string());
+auto find_current_index(const std::filesystem::path dir) -> std::optional<FileList> {
+    print(dir);
+    unwrap_oo_mut(list, list_files(dir.parent_path().string()));
+    filter_regular_files(list);
     for(auto i = size_t(0); i < list.files.size(); i += 1) {
-        if(list.files[i] == path.filename().string()) {
+        if(list.files[i] == dir.filename().string()) {
             list.index = i;
             return list;
         }
@@ -26,7 +29,7 @@ auto find_current_index(const std::filesystem::path path) -> std::optional<FileL
 
 auto find_next_directory(const std::filesystem::path dir, const bool reverse) -> std::optional<std::string> {
     unwrap_oo(list, find_current_index(dir));
-    if((reverse && list.index == 0) || (!reverse && list.index >= list.files.size())) {
+    if((reverse && list.index == 0) || (!reverse && list.index + 1 >= list.files.size())) {
         if(dir.parent_path() == dir) { // dir == "/"
             return std::nullopt;
         }
@@ -35,14 +38,15 @@ auto find_next_directory(const std::filesystem::path dir, const bool reverse) ->
     return list.prefix / list.files[list.index + (reverse ? -1 : 1)];
 }
 
-auto find_next_displayable_directory(const std::filesystem::path dir, const bool reverse) -> std::optional<FileList> {
+auto find_next_displayable_directory(std::filesystem::path dir, const bool reverse) -> std::optional<FileList> {
 loop:
-    unwrap_oo(next_dir, find_next_directory(dir, reverse));
-    auto list = list_files(next_dir);
+    unwrap_oo_mut(next_dir, find_next_directory(dir, reverse));
+    unwrap_oo_mut(list, list_files(next_dir));
     filter_non_image_files(list);
     if(!list.files.empty()) {
         return list;
     }
+    dir = std::move(next_dir);
     goto loop;
 }
 } // namespace
@@ -345,12 +349,14 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
     auto list = FileList();
     if(argc == 2) {
         if(std::filesystem::is_directory(argv[1])) {
-            list = list_files(argv[1]);
+            unwrap_ob_mut(l, list_files(argv[1]));
+            list = std::move(l);
             filter_non_image_files(list);
             assert_b(!list.files.empty());
         } else if(std::filesystem::is_regular_file(argv[1])) {
             const auto abs = std::filesystem::absolute(argv[1]);
-            list           = list_files(abs.parent_path().string());
+            unwrap_ob_mut(l, list_files(abs.parent_path().string()));
+            list = std::move(l);
             filter_non_image_files(list);
             assert_b(!list.files.empty());
             for(auto i = size_t(0); i < list.files.size(); i += 1) {

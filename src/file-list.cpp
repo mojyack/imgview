@@ -1,7 +1,9 @@
 #include <filesystem>
 
 #include "file-list.hpp"
+#include "macros/assert.hpp"
 #include "sort.hpp"
+#include "util/assert.hpp"
 
 namespace {
 template <class T, class E>
@@ -22,10 +24,15 @@ auto get_parent_dir(std::string_view dir) -> std::string {
     return std::filesystem::path(dir).parent_path().string();
 }
 
-auto list_files(const std::string_view path) -> FileList {
+auto list_files(const std::string_view path) -> std::optional<FileList> {
     auto fl = FileList{std::string(path), {}, 0};
-    for(const auto& it : std::filesystem::directory_iterator(path)) {
-        fl.files.push_back(it.path().filename().string());
+    try {
+        for(const auto& it : std::filesystem::directory_iterator(path)) {
+            fl.files.push_back(it.path().filename().string());
+        }
+    } catch(std::filesystem::filesystem_error& e) {
+        WARN(e.what());
+        return std::nullopt;
     }
     sort_strings(fl.files);
     return fl;
@@ -34,6 +41,13 @@ auto list_files(const std::string_view path) -> FileList {
 auto filter_non_image_files(FileList& list) -> void {
     std::erase_if(list.files, [&list](const std::string& path) {
         return !is_image_file(list.prefix / path);
+    });
+    return;
+}
+
+auto filter_regular_files(FileList& list) -> void {
+    std::erase_if(list.files, [&list](const std::string& path) {
+        return std::filesystem::is_regular_file(list.prefix / path);
     });
     return;
 }
