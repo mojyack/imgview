@@ -26,6 +26,18 @@ auto find_current_index(const std::filesystem::path dir) -> std::optional<FileLi
     return std::nullopt;
 }
 
+auto find_deepest_dir(const std::filesystem::path dir) -> std::optional<std::string> {
+    unwrap_oo_mut(list, list_files(dir.string()));
+    filter_regular_files(list);
+    for(const auto& file : list.files) {
+        const auto path = list.prefix / file;
+        if(std::filesystem::is_directory(path)) {
+            return find_deepest_dir(path);
+        }
+    }
+    return dir.string();
+}
+
 auto find_next_directory(const std::filesystem::path dir, const bool reverse) -> std::optional<std::string> {
     unwrap_oo(list, find_current_index(dir));
     if((reverse && list.index == 0) || (!reverse && list.index + 1 >= list.files.size())) {
@@ -34,7 +46,7 @@ auto find_next_directory(const std::filesystem::path dir, const bool reverse) ->
         }
         return find_next_directory(dir.parent_path(), reverse);
     }
-    return list.prefix / list.files[list.index + (reverse ? -1 : 1)];
+    return find_deepest_dir(list.prefix / list.files[list.index + (reverse ? -1 : 1)]);
 }
 
 auto find_next_displayable_directory(std::filesystem::path dir, const bool reverse) -> std::optional<FileList> {
