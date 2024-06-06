@@ -19,7 +19,7 @@ class Callbacks : public gawl::WindowNoTouchCallbacks {
     std::string                  page_jump_buffer;
     gawl::Point                  clicked_pos[2];
     std::optional<gawl::Point>   pointer_pos;
-    std::array<std::thread, 1>   workers;
+    std::array<std::thread, 4>   workers;
     Event                        worker_event;
 
     constexpr static auto move_speed  = 60.0;
