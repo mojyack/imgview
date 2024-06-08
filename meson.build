@@ -3,4 +3,7 @@ add_project_arguments('-Wfatal-errors', language: 'cpp')
 
 subdir('src')
 
-executable('imgview', imgview_files, dependencies : imgview_deps)
+executable('imgview', imgview_files,
+  dependencies : imgview_deps,
+  install : true,
+)
