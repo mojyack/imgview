@@ -188,6 +188,7 @@ auto Callbacks::refresh() -> void {
         const auto dable         = cache[list.index];
         if(dable && dable->loaded) {
             dable->draw(window, draw_params);
+            last_displayed = dable;
         } else {
             if(last_displayed) {
                 last_displayed->draw(window, draw_params);
