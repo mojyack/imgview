@@ -1,12 +1,12 @@
 [submodule "src/util"]
 	path = src/util
 	url = https://github.com/mojyack/cutil.git
-[submodule "submodules/cuitl"]
-	path = submodules/cuitl
-	url = https://github.com/mojyack/cutil.git
 [submodule "submodules/cutil-macros"]
 	path = submodules/cutil-macros
 	url = https://github.com/mojyack/cutil-macros.git
 [submodule "submodules/gawl"]
 	path = submodules/gawl
 	url = https://github.com/mojyack/gawl.git
+[submodule "submodules/cutil"]
+	path = submodules/cutil
+	url = https://github.com/mojyack/cutil.git
