@@ -10,7 +10,6 @@
 #include "gawl/wayland/window.hpp"
 #include "imgview.hpp"
 #include "macros/unwrap.hpp"
-#include "util/assert.hpp"
 #include "util/charconv.hpp"
 
 namespace {
@@ -70,7 +69,7 @@ auto Callbacks::change_page(const bool reverse) -> void {
         }
         list.index += reverse ? -1 : 1;
     }
-    worker_event.wakeup();
+    workers.event.notify();
     window->refresh();
 }
 
@@ -131,8 +130,7 @@ loop:
     }
 search_end:
     if(!displayable) {
-        worker_event.wait();
-        worker_event.clear();
+        workers.event.wait();
         goto loop;
     }
 
@@ -238,7 +236,7 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
             auto [lock_c, cache] = critical_cache.access();
             cache                = Cache(list.files.size());
         }
-        worker_event.wakeup();
+        workers.event.notify();
         window->refresh();
     } break;
     case KEY_SPACE:
@@ -269,7 +267,7 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
     case KEY_ENTER:
         // page jump apply
         if(set_index_by_page_jump_buffer()) {
-            worker_event.wakeup();
+            workers.event.notify();
         }
         page_jump = false;
         window->refresh();
@@ -394,9 +392,7 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
 
 auto Callbacks::run() -> void {
     running = true;
-    for(auto& worker : workers) {
-        worker = std::thread(&Callbacks::worker_main, this);
-    }
+    workers.run(std::bind(&Callbacks::worker_main, this));
 }
 
 Callbacks::Callbacks()
@@ -409,8 +405,5 @@ Callbacks::~Callbacks() {
     }
 
     running = false;
-    worker_event.wakeup();
-    for(auto& worker : workers) {
-        worker.join();
-    }
+    workers.stop();
 }

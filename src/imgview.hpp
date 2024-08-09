@@ -1,12 +1,10 @@
 #pragma once
-#include <thread>
-
 #include "displayable/displayable.hpp"
 #include "file-list.hpp"
 #include "gawl/textrender.hpp"
 #include "gawl/window-no-touch-callbacks.hpp"
 #include "util/critical.hpp"
-#include "util/event.hpp"
+#include "util/thread-pool.hpp"
 
 class Callbacks : public gawl::WindowNoTouchCallbacks {
   private:
@@ -19,8 +17,7 @@ class Callbacks : public gawl::WindowNoTouchCallbacks {
     std::string                  page_jump_buffer;
     gawl::Point                  clicked_pos[2];
     std::optional<gawl::Point>   pointer_pos;
-    std::array<std::thread, 4>   workers;
-    Event                        worker_event;
+    ThreadPool<4>                workers;
 
     constexpr static auto move_speed  = 60.0;
     constexpr static auto cache_range = 4;
