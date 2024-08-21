@@ -2,7 +2,6 @@
 
 #include "../gawl/misc.hpp"
 #include "../macros/assert.hpp"
-#include "../util/assert.hpp"
 #include "text.hpp"
 
 auto DisplayableText::load(const std::string_view path) -> bool {
@@ -10,7 +9,7 @@ auto DisplayableText::load(const std::string_view path) -> bool {
     try {
         in.open(path, std::ios::binary);
     } catch(const std::runtime_error& e) {
-        WARN(e.what());
+        bail(e.what());
     }
 
     text = std::string(std::istreambuf_iterator<char>(in), {});

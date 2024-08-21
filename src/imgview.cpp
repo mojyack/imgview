@@ -14,7 +14,7 @@
 
 namespace {
 auto find_current_index(const std::filesystem::path dir) -> std::optional<FileList> {
-    unwrap_oo_mut(list, list_files(dir.parent_path().string()));
+    unwrap_mut(list, list_files(dir.parent_path().string()));
     filter_regular_files(list);
     for(auto i = size_t(0); i < list.files.size(); i += 1) {
         if(list.files[i] == dir.filename().string()) {
@@ -26,7 +26,7 @@ auto find_current_index(const std::filesystem::path dir) -> std::optional<FileLi
 }
 
 auto find_deepest_dir(const std::filesystem::path dir) -> std::optional<std::string> {
-    unwrap_oo_mut(list, list_files(dir.string()));
+    unwrap_mut(list, list_files(dir.string()));
     filter_regular_files(list);
     for(const auto& file : list.files) {
         const auto path = list.prefix / file;
@@ -38,7 +38,7 @@ auto find_deepest_dir(const std::filesystem::path dir) -> std::optional<std::str
 }
 
 auto find_next_directory(const std::filesystem::path dir, const bool reverse) -> std::optional<std::string> {
-    unwrap_oo(list, find_current_index(dir));
+    unwrap(list, find_current_index(dir));
     if((reverse && list.index == 0) || (!reverse && list.index + 1 >= list.files.size())) {
         if(dir.parent_path() == dir) { // dir == "/"
             return std::nullopt;
@@ -50,8 +50,8 @@ auto find_next_directory(const std::filesystem::path dir, const bool reverse) ->
 
 auto find_next_displayable_directory(std::filesystem::path dir, const bool reverse) -> std::optional<FileList> {
 loop:
-    unwrap_oo_mut(next_dir, find_next_directory(dir, reverse));
-    unwrap_oo_mut(list, list_files(next_dir));
+    unwrap_mut(next_dir, find_next_directory(dir, reverse));
+    unwrap_mut(list, list_files(next_dir));
     filter_non_image_files(list);
     if(!list.files.empty()) {
         return list;
@@ -74,9 +74,9 @@ auto Callbacks::change_page(const bool reverse) -> void {
 }
 
 auto Callbacks::set_index_by_page_jump_buffer() -> bool {
-    unwrap_ob(page, from_chars<size_t>(page_jump_buffer));
+    unwrap(page, from_chars<size_t>(page_jump_buffer));
     auto [lock_f, list] = critical_files.access();
-    assert_b(page < list.files.size());
+    ensure(page < list.files.size());
     list.index = page;
     return true;
 }
@@ -231,7 +231,7 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
         const auto reverse = keycode == KEY_UP;
         {
             auto [lock_f, list] = critical_files.access();
-            unwrap_on_mut(next_list, find_next_displayable_directory(list.prefix, reverse), "cannot find next directory");
+            unwrap_mut(next_list, find_next_displayable_directory(list.prefix, reverse), "cannot find next directory");
             list                 = std::move(next_list);
             auto [lock_c, cache] = critical_cache.access();
             cache                = Cache(list.files.size());
@@ -354,21 +354,21 @@ auto Callbacks::on_scroll(gawl::WheelAxis /*axis*/, double /*value*/) -> void {
 }
 
 auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
-    assert_b(argc > 1);
+    ensure(argc > 1);
 
     const auto abs  = std::filesystem::absolute(argv[1]);
     auto       list = FileList();
     if(argc == 2) {
         if(std::filesystem::is_directory(argv[1])) {
-            unwrap_ob_mut(l, list_files(abs.string()));
+            unwrap_mut(l, list_files(abs.string()));
             list = std::move(l);
             filter_non_image_files(list);
-            assert_b(!list.files.empty());
+            ensure(!list.files.empty());
         } else if(std::filesystem::is_regular_file(argv[1])) {
-            unwrap_ob_mut(l, list_files(abs.parent_path().string()));
+            unwrap_mut(l, list_files(abs.parent_path().string()));
             list = std::move(l);
             filter_non_image_files(list);
-            assert_b(!list.files.empty());
+            ensure(!list.files.empty());
             for(auto i = size_t(0); i < list.files.size(); i += 1) {
                 if(list.files[i] == abs.filename()) {
                     list.index = i;

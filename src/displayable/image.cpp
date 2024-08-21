@@ -1,7 +1,6 @@
 #include "image.hpp"
 #include "../gawl/misc.hpp"
 #include "../macros/unwrap.hpp"
-#include "../util/assert.hpp"
 
 namespace {
 auto calc_draw_area(const gawl::Graphic& graphic, gawl::Screen* const screen, const DrawParameters& params) -> gawl::Rectangle {
@@ -17,7 +16,7 @@ auto calc_draw_area(const gawl::Graphic& graphic, gawl::Screen* const screen, co
 } // namespace
 
 auto DisplayableImage::load(const std::string_view path) -> bool {
-    unwrap_ob(pixbuf, gawl::PixelBuffer::from_file(std::string(path).data()));
+    unwrap(pixbuf, gawl::PixelBuffer::from_file(std::string(path).data()));
     image.update_texture(pixbuf);
     return true;
 }

@@ -3,7 +3,6 @@
 #include "file-list.hpp"
 #include "macros/assert.hpp"
 #include "sort.hpp"
-#include "util/assert.hpp"
 
 namespace {
 template <class T, class E>
@@ -31,8 +30,7 @@ auto list_files(const std::string_view path) -> std::optional<FileList> {
             fl.files.push_back(it.path().filename().string());
         }
     } catch(std::filesystem::filesystem_error& e) {
-        WARN(e.what());
-        return std::nullopt;
+        bail(e.what());
     }
     sort_strings(fl.files);
     return fl;
