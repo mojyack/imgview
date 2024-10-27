@@ -17,7 +17,7 @@ auto calc_draw_area(const gawl::Graphic& graphic, gawl::Screen* const screen, co
 
 auto DisplayableImage::load(const std::string_view path) -> bool {
     unwrap(pixbuf, gawl::PixelBuffer::from_file(std::string(path).data()));
-    image.update_texture(pixbuf);
+    image = gawl::Graphic(pixbuf);
     return true;
 }
 

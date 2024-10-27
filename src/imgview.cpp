@@ -1,4 +1,7 @@
 #include <filesystem>
+
+#include <coop/parallel.hpp>
+#include <coop/thread.hpp>
 #include <linux/input.h>
 
 #include "displayable/image.hpp"
@@ -63,19 +66,17 @@ loop:
 
 auto Callbacks::change_page(const bool reverse) -> void {
     {
-        auto [lock, list] = critical_files.access();
         if((reverse && list.index == 0) || (!reverse && list.index + 1 == list.files.size())) {
             return;
         }
         list.index += reverse ? -1 : 1;
     }
-    workers.event.notify();
+    worker_event.notify();
     window->refresh();
 }
 
 auto Callbacks::set_index_by_page_jump_buffer() -> bool {
     unwrap(page, from_chars<size_t>(page_jump_buffer));
-    auto [lock_f, list] = critical_files.access();
     ensure(page < list.files.size());
     list.index = page;
     return true;
@@ -87,85 +88,77 @@ auto Callbacks::reset_draw_pos() -> void {
     draw_scale     = 0.0;
 }
 
-auto Callbacks::worker_main() -> void {
-    auto context = std::bit_cast<gawl::WaylandWindow*>(window)->fork_context();
+auto Callbacks::worker_main() -> coop::Async<void> {
 loop:
-    if(!running) {
-        return;
-    }
     // find target
     auto displayable = std::shared_ptr<Displayable>();
     auto work        = std::filesystem::path();
     auto file        = std::string();
     auto index       = int();
-    {
-        const auto [lock_f, list]  = critical_files.access();
-        const auto [lock_c, cache] = critical_cache.access();
 
-        const auto range = std::min(cache_range, int(list.files.size() / 2) + 1);
-        for(auto distance = 0; distance < range; distance += 1) {
-            for(auto backward = (distance == 0 ? 1 : 0); backward < 2; backward += 1) {
-                const auto i = int(list.index) + (backward == 0 ? distance : -distance);
-                if(i < 0 || size_t(i) >= list.files.size()) {
-                    continue;
-                }
-                if(cache[i]) {
-                    continue;
-                }
-                const auto ext = std::filesystem::path(list.files[i]).extension();
-                auto       ptr = (Displayable*)(nullptr);
-                if(ext == ".txt") {
-                    ptr = new DisplayableText(font);
-                } else {
-                    ptr = new DisplayableImage();
-                }
-                displayable = std::shared_ptr<Displayable>(ptr);
-                cache[i]    = displayable;
-                work        = list.prefix;
-                file        = list.files[i];
-                index       = i;
-                goto search_end;
+    const auto range = std::min(cache_range, int(list.files.size() / 2) + 1);
+    for(auto distance = 0; distance < range; distance += 1) {
+        for(auto backward = (distance == 0 ? 1 : 0); backward < 2; backward += 1) {
+            const auto i = int(list.index) + (backward == 0 ? distance : -distance);
+            if(i < 0 || size_t(i) >= list.files.size()) {
+                continue;
             }
+            if(cache[i]) {
+                continue;
+            }
+            const auto ext = std::filesystem::path(list.files[i]).extension();
+            auto       ptr = (Displayable*)(nullptr);
+            if(ext == ".txt") {
+                ptr = new DisplayableText(font);
+            } else {
+                ptr = new DisplayableImage();
+            }
+            displayable = std::shared_ptr<Displayable>(ptr);
+            cache[i]    = displayable;
+            work        = list.prefix;
+            file        = list.files[i];
+            index       = i;
+            goto search_end;
         }
     }
 search_end:
     if(!displayable) {
-        workers.event.wait();
+        co_await worker_event;
         goto loop;
     }
 
     // load file
     const auto path = work / file;
-    if(!displayable->load(path.string())) {
+    if(!co_await coop::run_blocking([&]() {
+           auto context = std::bit_cast<gawl::WaylandWindow*>(window)->fork_context();
+           if(!displayable->load(path.string())) {
+               return false;
+           }
+           context.wait();
+           return true;
+       })) {
         displayable = std::shared_ptr<Displayable>(new DisplayableText(font, "broken image"));
     }
-    context.wait();
 
     // store
-    {
-        const auto [lock_f, list] = critical_files.access();
+    if(list.prefix != work) {
+        // work changed
+        goto loop;
+    }
 
-        if(list.prefix != work) {
-            // work changed
-            goto loop;
-        }
+    displayable->loaded = true;
+    cache[index]        = std::move(displayable);
+    window->refresh();
 
-        const auto [lock_c, cache] = critical_cache.access();
+    // clean cache
+    const auto begin = list.index > cache_range ? list.index - cache_range : 0;
+    const auto end   = std::min(list.index + cache_range, list.files.size() - 1);
 
-        displayable->loaded = true;
-        cache[index]        = std::move(displayable);
-        window->refresh();
-
-        // clean cache
-        const auto begin = list.index > cache_range ? list.index - cache_range : 0;
-        const auto end   = std::min(list.index + cache_range, list.files.size() - 1);
-
-        for(auto i = size_t(0); i < begin; i += 1) {
-            cache[i].reset();
-        }
-        for(auto i = end + 1; i < cache.size(); i += 1) {
-            cache[i].reset();
-        }
+    for(auto i = size_t(0); i < begin; i += 1) {
+        cache[i].reset();
+    }
+    for(auto i = end + 1; i < cache.size(); i += 1) {
+        cache[i].reset();
     }
 
     goto loop;
@@ -174,7 +167,6 @@ search_end:
 auto Callbacks::refresh() -> void {
     gawl::clear_screen({0, 0, 0, 0});
     const auto [width, height] = window->get_window_size();
-    const auto [lock, list]    = critical_files.access();
     if(list.files.empty()) {
         return;
     }
@@ -182,8 +174,7 @@ auto Callbacks::refresh() -> void {
     const auto draw_params = DrawParameters{{width, height}, {draw_offset[0], draw_offset[1]}, draw_scale};
     const auto path        = list.prefix / list.files[list.index];
     {
-        const auto [lock, cache] = critical_cache.access();
-        const auto dable         = cache[list.index];
+        const auto dable = cache[list.index];
         if(dable && dable->loaded) {
             dable->draw(window, draw_params);
             last_displayed = dable;
@@ -213,9 +204,11 @@ auto Callbacks::refresh() -> void {
     }
 }
 
-auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state) -> void {
+auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state) -> coop::Async<bool> {
+    constexpr auto error_value = true;
+
     if(state == gawl::ButtonState::Enter || state == gawl::ButtonState::Leave || state == gawl::ButtonState::Release) {
-        return;
+        co_return true;
     }
 
     switch(keycode) {
@@ -230,13 +223,11 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
         // next/prev work
         const auto reverse = keycode == KEY_UP;
         {
-            auto [lock_f, list] = critical_files.access();
-            unwrap_mut(next_list, find_next_displayable_directory(list.prefix, reverse), "cannot find next directory");
-            list                 = std::move(next_list);
-            auto [lock_c, cache] = critical_cache.access();
-            cache                = Cache(list.files.size());
+            co_unwrap_v_mut(next_list, find_next_displayable_directory(list.prefix, reverse), "cannot find next directory");
+            list  = std::move(next_list);
+            cache = Cache(list.files.size());
         }
-        workers.event.notify();
+        worker_event.notify();
         window->refresh();
     } break;
     case KEY_SPACE:
@@ -267,7 +258,7 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
     case KEY_ENTER:
         // page jump apply
         if(set_index_by_page_jump_buffer()) {
-            workers.event.notify();
+            worker_event.notify();
         }
         page_jump = false;
         window->refresh();
@@ -287,6 +278,7 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
     case KEY_O:
         // reset position
         reset_draw_pos();
+        window->refresh();
         break;
     }
 
@@ -297,9 +289,10 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
             window->refresh();
         }
     }
+    co_return true;
 }
 
-auto Callbacks::on_pointer(const gawl::Point& pos) -> void {
+auto Callbacks::on_pointer(const gawl::Point pos) -> coop::Async<bool> {
     auto do_refresh = false;
     if(pointer_pos.has_value()) {
         if(clicked[0]) {
@@ -309,9 +302,7 @@ auto Callbacks::on_pointer(const gawl::Point& pos) -> void {
         }
         if(clicked[1]) {
             do {
-                auto [lock_f, list]  = critical_files.access();
-                auto [lock_c, cache] = critical_cache.access();
-                const auto path      = (list.prefix / list.files[list.index]).string();
+                const auto path = (list.prefix / list.files[list.index]).string();
                 if(!cache[list.index] || !cache[list.index]->loaded) {
                     break;
                 }
@@ -331,11 +322,12 @@ auto Callbacks::on_pointer(const gawl::Point& pos) -> void {
     if(do_refresh) {
         window->refresh();
     }
+    co_return true;
 }
 
-auto Callbacks::on_click(const uint32_t button, const gawl::ButtonState state) -> void {
+auto Callbacks::on_click(const uint32_t button, const gawl::ButtonState state) -> coop::Async<bool> {
     if(button != BTN_LEFT && button != BTN_RIGHT) {
-        return;
+        co_return true;
     }
 
     const auto i = button == BTN_LEFT ? 0 : 1;
@@ -348,16 +340,13 @@ auto Callbacks::on_click(const uint32_t button, const gawl::ButtonState state) -
         change_page(false);
     }
     moved = false;
-}
-
-auto Callbacks::on_scroll(gawl::WheelAxis /*axis*/, double /*value*/) -> void {
+    co_return true;
 }
 
 auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
     ensure(argc > 1);
 
-    const auto abs  = std::filesystem::absolute(argv[1]);
-    auto       list = FileList();
+    const auto abs = std::filesystem::absolute(argv[1]);
     if(argc == 2) {
         if(std::filesystem::is_directory(argv[1])) {
             unwrap_mut(l, list_files(abs.string()));
@@ -385,14 +374,19 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
         }
     }
 
-    critical_cache.unsafe_access() = Cache(list.files.size());
-    critical_files.unsafe_access() = std::move(list);
+    cache.resize(list.files.size());
     return true;
 }
 
-auto Callbacks::run() -> void {
-    running = true;
-    workers.run(std::bind(&Callbacks::worker_main, this));
+auto Callbacks::on_created(gawl::Window* /*window*/) -> coop::Async<bool> {
+    auto works   = std::vector<coop::Async<void>>(workers.size());
+    auto handles = std::vector<coop::TaskHandle*>(workers.size());
+    for(auto i = 0u; i < workers.size(); i += 1) {
+        works[i]   = worker_main();
+        handles[i] = &workers[i];
+    }
+    co_await coop::run_vec(std::move(works)).detach(std::move(handles));
+    co_return true;
 }
 
 Callbacks::Callbacks()
@@ -400,10 +394,7 @@ Callbacks::Callbacks()
 }
 
 Callbacks::~Callbacks() {
-    if(!running) {
-        return;
+    for(auto& worker : workers) {
+        worker.cancel();
     }
-
-    running = false;
-    workers.stop();
 }
