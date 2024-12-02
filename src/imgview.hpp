@@ -1,5 +1,6 @@
 #pragma once
-#include <coop/event.hpp>
+#include <coop/generator.hpp>
+#include <coop/multi-event.hpp>
 
 #include "displayable/displayable.hpp"
 #include "file-list.hpp"
@@ -17,7 +18,7 @@ class Callbacks : public gawl::WindowNoTouchCallbacks {
     std::string                     page_jump_buffer;
     gawl::Point                     clicked_pos[2];
     std::optional<gawl::Point>      pointer_pos;
-    coop::Event                     worker_event;
+    coop::MultiEvent                worker_event;
     std::array<coop::TaskHandle, 4> workers;
 
     constexpr static auto move_speed  = 60.0;
