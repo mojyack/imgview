@@ -24,7 +24,11 @@ auto DisplayableText::draw(gawl::Screen* const screen, const DrawParameters& par
 
     gawl::draw_rect(*screen, rect, {0, 0, 0, 0.6});
     gawl::mask_alpha();
-    font->draw_wrapped(*screen, rect, font_size * 1.3, {1, 1, 1, 1}, text, cache, font_size, gawl::Align::Left, gawl::Align::Left);
+    font->draw_wrapped(*screen, rect, font_size * 1.3, {1, 1, 1, 1}, text, cache, {
+                                                                                      .size    = font_size,
+                                                                                      .align_x = gawl::Align::Left,
+                                                                                      .align_y = gawl::Align::Left,
+                                                                                  });
     gawl::unmask_alpha();
 }
 
