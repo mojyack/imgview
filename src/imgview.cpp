@@ -189,17 +189,17 @@ auto Callbacks::refresh() -> void {
     if(!hide_info) {
         const auto info = path.parent_path().filename() / path.filename();
         const auto str  = build_string("[", list.index + 1, "/", list.files.size(), "]", info.string());
-        const auto rect = gawl::Rectangle(font.get_rect(*window, str.data())).expand(2, 2);
+        const auto rect = gawl::Rectangle(font.get_rect(*window, str)).expand(2, 2);
         const auto box  = gawl::Rectangle{{0, height - rect.height() - top}, {rect.width(), height - top}};
         gawl::draw_rect(*window, box, {0, 0, 0, 0.5});
-        font.draw_fit_rect(*window, box, {1, 1, 1, 0.7}, str.data());
+        font.draw_fit_rect(*window, box, {1, 1, 1, 0.7}, str);
         top += rect.height();
     }
     if(page_jump) {
         const auto str  = std::string("Page: ") + page_jump_buffer;
-        const auto rect = font.get_rect(*window, str.data());
+        const auto rect = font.get_rect(*window, str);
         const auto box  = gawl::Rectangle{{0, height - rect.height() - top}, {rect.width(), height - top}};
-        font.draw_fit_rect(*window, box, {1, 1, 1, 0.7}, str.data());
+        font.draw_fit_rect(*window, box, {1, 1, 1, 0.7}, str);
         top += rect.height();
     }
 }
@@ -390,7 +390,7 @@ auto Callbacks::on_created(gawl::Window* /*window*/) -> coop::Async<bool> {
 }
 
 Callbacks::Callbacks()
-    : font(gawl::TextRender({gawl::find_fontpath_from_name("Noto Sans CJK JP:style=Bold").value().data()}, 16)) {
+    : font(gawl::TextRender({gawl::find_fontpath_from_name("Noto Sans CJK JP:style=Bold").value()}, 16)) {
 }
 
 Callbacks::~Callbacks() {
