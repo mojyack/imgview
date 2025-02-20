@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <ranges>
 
 #include <coop/parallel.hpp>
 #include <coop/thread.hpp>
@@ -19,7 +20,7 @@ namespace {
 auto find_current_index(const std::filesystem::path dir) -> std::optional<FileList> {
     unwrap_mut(list, list_files(dir.parent_path().string()));
     filter_regular_files(list);
-    for(auto i = size_t(0); i < list.files.size(); i += 1) {
+    for(auto i = 0uz; i < list.files.size(); i += 1) {
         if(list.files[i] == dir.filename().string()) {
             list.index = i;
             return list;
@@ -154,7 +155,7 @@ search_end:
     const auto begin = list.index > cache_range ? list.index - cache_range : 0;
     const auto end   = std::min(list.index + cache_range, list.files.size() - 1);
 
-    for(auto i = size_t(0); i < begin; i += 1) {
+    for(auto i = 0uz; i < begin; i += 1) {
         cache[i].reset();
     }
     for(auto i = end + 1; i < cache.size(); i += 1) {
@@ -188,7 +189,7 @@ auto Callbacks::refresh() -> void {
     auto top = 0.0;
     if(!hide_info) {
         const auto info = path.parent_path().filename() / path.filename();
-        const auto str  = build_string("[", list.index + 1, "/", list.files.size(), "]", info.string());
+        const auto str  = std::format("[{}/{}]{}", list.index + 1, list.files.size(), info.string());
         const auto rect = gawl::Rectangle(font.get_rect(*window, str)).expand(2, 2);
         const auto box  = gawl::Rectangle{{0, height - rect.height() - top}, {rect.width(), height - top}};
         gawl::draw_rect(*window, box, {0, 0, 0, 0.5});
@@ -196,7 +197,7 @@ auto Callbacks::refresh() -> void {
         top += rect.height();
     }
     if(page_jump) {
-        const auto str  = std::string("Page: ") + page_jump_buffer;
+        const auto str  = std::format("Page: {}", page_jump_buffer);
         const auto rect = font.get_rect(*window, str);
         const auto box  = gawl::Rectangle{{0, height - rect.height() - top}, {rect.width(), height - top}};
         font.draw_fit_rect(*window, box, {1, 1, 1, 0.7}, str);
@@ -358,14 +359,13 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
             list = std::move(l);
             filter_non_image_files(list);
             ensure(!list.files.empty());
-            for(auto i = size_t(0); i < list.files.size(); i += 1) {
+            for(auto i = 0uz; i < list.files.size(); i += 1) {
                 if(list.files[i] == abs.filename()) {
                     list.index = i;
                 }
             }
         } else {
-            warn("no such file");
-            return false;
+            bail("no such file");
         }
     } else {
         list.prefix = abs.parent_path();
@@ -381,9 +381,10 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
 auto Callbacks::on_created(gawl::Window* /*window*/) -> coop::Async<bool> {
     auto works   = std::vector<coop::Async<void>>(workers.size());
     auto handles = std::vector<coop::TaskHandle*>(workers.size());
-    for(auto i = 0u; i < workers.size(); i += 1) {
-        works[i]   = worker_main();
-        handles[i] = &workers[i];
+
+    for(auto&& [work, worker, handle] : std::views::zip(works, workers, handles)) {
+        work   = worker_main();
+        handle = &worker;
     }
     co_await coop::run_vec(std::move(works)).detach(std::move(handles));
     co_return true;

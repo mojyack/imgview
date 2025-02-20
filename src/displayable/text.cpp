@@ -9,7 +9,7 @@ auto DisplayableText::load(const std::string_view path) -> bool {
     try {
         in.open(path, std::ios::binary);
     } catch(const std::runtime_error& e) {
-        bail(e.what());
+        bail("filesystem error: {}", e.what());
     }
 
     text = std::string(std::istreambuf_iterator<char>(in), {});

@@ -30,7 +30,7 @@ auto list_files(const std::string_view path) -> std::optional<FileList> {
             fl.files.push_back(it.path().filename().string());
         }
     } catch(std::filesystem::filesystem_error& e) {
-        bail(e.what());
+        bail("filesystem error: {}", e.what());
     }
     sort_strings(fl.files);
     return fl;
