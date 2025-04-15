@@ -39,6 +39,7 @@ class Callbacks : public gawl::WindowNoTouchCallbacks {
     auto worker_main() -> coop::Async<void>;
 
   public:
+    auto close() -> void override;
     auto refresh() -> void override;
     auto on_keycode(uint32_t keycode, gawl::ButtonState state) -> coop::Async<bool> override;
     auto on_pointer(gawl::Point /*pos*/) -> coop::Async<bool> override;

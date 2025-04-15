@@ -165,6 +165,10 @@ search_end:
     goto loop;
 }
 
+auto Callbacks::close() -> void {
+    application->quit();
+}
+
 auto Callbacks::refresh() -> void {
     gawl::clear_screen({0, 0, 0, 0});
     const auto [width, height] = window->get_window_size();
