@@ -1,7 +1,7 @@
 #include <filesystem>
-#include <ranges>
 
 #include <coop/parallel.hpp>
+#include <coop/task-handle.hpp>
 #include <coop/thread.hpp>
 #include <linux/input.h>
 
@@ -379,14 +379,10 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
 }
 
 auto Callbacks::on_created(gawl::Window* /*window*/) -> coop::Async<bool> {
-    auto works   = std::vector<coop::Async<void>>(workers.size());
-    auto handles = std::vector<coop::TaskHandle*>(workers.size());
-
-    for(auto&& [work, worker, handle] : std::views::zip(works, workers, handles)) {
-        work   = worker_main();
-        handle = &worker;
+    auto& runner = *(co_await coop::reveal_runner());
+    for(auto& handle : workers) {
+        runner.push_task(worker_main(), &handle);
     }
-    co_await coop::run_vec(std::move(works)).detach(std::move(handles));
     co_return true;
 }
 
