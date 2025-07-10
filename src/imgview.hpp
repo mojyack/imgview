@@ -27,10 +27,11 @@ class Callbacks : public gawl::WindowNoTouchCallbacks {
     double draw_offset[2] = {0, 0};
     double draw_scale     = 0.0;
 
-    bool page_jump  = false;
-    bool clicked[2] = {false, false};
-    bool moved      = false;
-    bool hide_info  = false;
+    bool page_jump       = false;
+    bool clicked[2]      = {false, false};
+    bool moved           = false;
+    bool hide_info       = false;
+    bool fill_background = false;
 
     auto check_existence(bool reverse, FileList& files) -> bool;
     auto change_page(bool reverse) -> void;

@@ -170,7 +170,7 @@ auto Callbacks::close() -> void {
 }
 
 auto Callbacks::refresh() -> void {
-    gawl::clear_screen({0, 0, 0, 0});
+    gawl::clear_screen({0, 0, 0, fill_background ? 1.0 : 0.0});
     const auto [width, height] = window->get_window_size();
     if(list.files.empty()) {
         return;
@@ -287,6 +287,10 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
         break;
     case KEY_I:
         hide_info = !hide_info;
+        window->refresh();
+        break;
+    case KEY_B:
+        fill_background = !fill_background;
         window->refresh();
         break;
     }
