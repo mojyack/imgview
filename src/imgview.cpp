@@ -285,6 +285,10 @@ auto Callbacks::on_keycode(const uint32_t keycode, const gawl::ButtonState state
         reset_draw_pos();
         window->refresh();
         break;
+    case KEY_I:
+        hide_info = !hide_info;
+        window->refresh();
+        break;
     }
 
     if(page_jump) {
