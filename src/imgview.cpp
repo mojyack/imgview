@@ -171,7 +171,7 @@ auto Callbacks::close() -> void {
 
 auto Callbacks::refresh() -> void {
     gawl::clear_screen({0, 0, 0, fill_background ? 1.0 : 0.0});
-    const auto [width, height] = window->get_window_size();
+    const auto [width, height] = window->window_size;
     if(list.files.empty()) {
         return;
     }
@@ -319,7 +319,7 @@ auto Callbacks::on_pointer(const gawl::Point pos) -> coop::Async<bool> {
                 if(!cache[list.index] || !cache[list.index]->loaded) {
                     break;
                 }
-                const auto [width, height] = window->get_window_size();
+                const auto [width, height] = window->window_size;
                 const auto value           = (pos.y - pointer_pos->y) * 0.01;
                 auto       draw_params     = DrawParameters{{width, height}, {draw_offset[0], draw_offset[1]}, draw_scale};
                 cache[list.index]->zoom_by_drag(window, clicked_pos[1], value, draw_params);
