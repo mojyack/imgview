@@ -1,25 +1,33 @@
 #pragma once
 #include <coop/generator.hpp>
 #include <coop/multi-event.hpp>
+#include <coop/thread-pre.hpp>
 
 #include "displayable/displayable.hpp"
 #include "file-list.hpp"
 #include "gawl/textrender.hpp"
+#include "gawl/wayland/eglobject.hpp"
 #include "gawl/window-no-touch-callbacks.hpp"
+
+struct Worker {
+    gawl::EGLSubObject context;
+    coop::Thread       thread;
+    coop::TaskHandle   handle;
+};
 
 class Callbacks : public gawl::WindowNoTouchCallbacks {
   private:
     using Cache = std::vector<std::shared_ptr<Displayable>>;
 
-    gawl::TextRender                font;
-    FileList                        list;
-    Cache                           cache;
-    std::shared_ptr<Displayable>    last_displayed;
-    std::string                     page_jump_buffer;
-    gawl::Point                     clicked_pos[2];
-    std::optional<gawl::Point>      pointer_pos;
-    coop::MultiEvent                worker_event;
-    std::array<coop::TaskHandle, 4> workers;
+    gawl::TextRender             font;
+    FileList                     list;
+    Cache                        cache;
+    std::shared_ptr<Displayable> last_displayed;
+    std::string                  page_jump_buffer;
+    gawl::Point                  clicked_pos[2];
+    std::optional<gawl::Point>   pointer_pos;
+    coop::MultiEvent             worker_event;
+    std::array<Worker, 4>        workers;
 
     constexpr static auto move_speed  = 60.0;
     constexpr static auto cache_range = 4;
@@ -37,7 +45,7 @@ class Callbacks : public gawl::WindowNoTouchCallbacks {
     auto change_page(bool reverse) -> void;
     auto set_index_by_page_jump_buffer() -> bool;
     auto reset_draw_pos() -> void;
-    auto worker_main() -> coop::Async<void>;
+    auto worker_main(Worker& worker) -> coop::Async<void>;
 
   public:
     auto close() -> void override;

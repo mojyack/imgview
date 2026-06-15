@@ -89,7 +89,11 @@ auto Callbacks::reset_draw_pos() -> void {
     draw_scale     = 0.0;
 }
 
-auto Callbacks::worker_main() -> coop::Async<void> {
+auto Callbacks::worker_main(Worker& worker) -> coop::Async<void> {
+    co_await worker.thread.run([this, &worker] {
+        worker.context = std::bit_cast<gawl::WaylandWindow*>(window)->fork_context();
+    });
+
 loop:
     // find target
     auto displayable = std::shared_ptr<Displayable>();
@@ -130,12 +134,11 @@ search_end:
 
     // load file
     const auto path = work / file;
-    if(!co_await coop::run_blocking([&]() {
-           auto context = std::bit_cast<gawl::WaylandWindow*>(window)->fork_context();
+    if(!co_await worker.thread.run([&]() {
            if(!displayable->load(path.string())) {
                return false;
            }
-           context.wait();
+           worker.context.wait();
            return true;
        })) {
         displayable = std::shared_ptr<Displayable>(new DisplayableText(font, "broken image"));
@@ -392,8 +395,8 @@ auto Callbacks::init(const int argc, const char* const argv[]) -> bool {
 
 auto Callbacks::on_created(gawl::Window* /*window*/) -> coop::Async<bool> {
     auto& runner = *(co_await coop::reveal_runner());
-    for(auto& handle : workers) {
-        runner.push_task(worker_main(), &handle);
+    for(auto& worker : workers) {
+        runner.push_task(worker_main(worker), &worker.handle);
     }
     co_return true;
 }
@@ -404,6 +407,6 @@ Callbacks::Callbacks()
 
 Callbacks::~Callbacks() {
     for(auto& worker : workers) {
-        worker.cancel();
+        worker.handle.cancel();
     }
 }
